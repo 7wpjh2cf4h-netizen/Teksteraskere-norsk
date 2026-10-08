@@ -25,7 +25,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 
 from tekst import burn, compare, segment
-from tekst.engine import MODELS, PEAK_RATE, Cancelled, Engine, compute_peaks, media_duration
+from tekst.engine import MODELS, PEAK_RATE, Cancelled, Engine, compute_peaks, media_duration, peaks_from_audio
 from tekst.spell import Speller
 from tekst.learn import Learner
 from tekst.store import Store
@@ -76,6 +76,14 @@ def finish_cues(pid, words, settings):
     store.save_json(pid, "cues_orig.json", cues)
     store.save_json(pid, "autofix.json", fixes)
     return cues, fixes
+
+
+def safe_update(pid, **kw):
+    """store.update that ignores a project deleted meanwhile (must never kill a worker thread)."""
+    try:
+        store.update(pid, **kw)
+    except KeyError:
+        pass
 
 
 class Tracker:
@@ -157,13 +165,16 @@ class Worker(threading.Thread):
             try:
                 self.process(job)
             except Cancelled:
-                store.update(job["id"], status="cancelled", eta=None, message="")
+                safe_update(job["id"], status="cancelled", eta=None, message="")
+            except KeyError:
+                pass  # project deleted while it was being transcribed
             except Exception as e:
                 traceback.print_exc()
-                store.update(job["id"], status="error", eta=None, message=str(e)[:300])
+                safe_update(job["id"], status="error", eta=None, message=str(e)[:300])
             finally:
                 self.current = None
                 self.downloading.clear()
+                engine.drop_audio()
 
     def ensure_model(self, pid, name):
         """Download the model if needed. Returns False (and marks the job) if it failed."""
@@ -203,7 +214,7 @@ class Worker(threading.Thread):
         dur = job.get("duration") or media_duration(job["path"]) or 600.0
         plan = [("transcribing", ph, sec) for ph, sec in engine.plan(name, dur, rescue=True)]
         if double:
-            plan += [("checking", ph, sec) for ph, sec in engine.plan("small", dur, loaded=False)]
+            plan += [("checking", ph, sec) for ph, sec in engine.plan("small", dur)]
         plan.append(("finishing", "finish", dur / 120 + 2))
         tr = Tracker(pid, plan, time_scale())
         store.update(pid, status="transcribing", phase=None, progress=0.0, eta=None, rate=0, pt=None, double=double,
@@ -264,18 +275,20 @@ class Exporter(threading.Thread):
             def prog(p):
                 if time.time() - last[0] > 0.7 or p >= 1:
                     last[0] = time.time()
-                    store.update(pid, export={"status": "running", "progress": p})
+                    safe_update(pid, export={"status": "running", "progress": p})
 
             try:
                 store.update(pid, export={"status": "running", "progress": 0.0})
                 out = burn.burn(job["path"], store.cues(pid), store.settings()["style"],
                                 store._dir(pid) / "burn", prog, self.stop)
-                store.update(pid, export={"status": "done", "progress": 1.0, "path": str(out), "at": time.time()})
+                safe_update(pid, export={"status": "done", "progress": 1.0, "path": str(out), "at": time.time()})
             except burn.Cancelled:
-                store.update(pid, export={"status": "cancelled"})
+                safe_update(pid, export={"status": "cancelled"})
+            except KeyError:
+                pass  # project deleted before the burn-in started
             except Exception as e:
                 traceback.print_exc()
-                store.update(pid, export={"status": "error", "message": str(e)[:300]})
+                safe_update(pid, export={"status": "error", "message": str(e)[:300]})
             finally:
                 self.current = None
 
@@ -283,7 +296,9 @@ class Exporter(threading.Thread):
 def peaks_for(pid):
     f = store._dir(pid) / "peaks.bin"
     if not f.exists():
-        f.write_bytes(compute_peaks(store.get(pid)["path"]))
+        path = store.get(pid)["path"]
+        audio = engine.cached_audio(path)
+        f.write_bytes(peaks_from_audio(audio) if audio is not None else compute_peaks(path))
     return f
 
 
@@ -384,12 +399,16 @@ def cancel(pid: str):
 
 @app.delete("/api/jobs/{pid}")
 def remove(pid: str):
-    if worker.current == pid:
-        worker.stop_job.set()
-        for _ in range(50):
-            if worker.current != pid:
-                break
-            time.sleep(0.1)
+    m = project(pid)
+    if (m.get("export") or {}).get("status") == "queued":
+        store.update(pid, export={"status": "cancelled"})  # so the exporter doesn't pick it up meanwhile
+    for busy_with, stop in ((lambda: worker.current, worker.stop_job), (lambda: exporter.current, exporter.stop)):
+        if busy_with() == pid:
+            stop.set()
+            for _ in range(100):  # burn-in stops within a second; transcription at its next step
+                if busy_with() != pid:
+                    break
+                time.sleep(0.1)
     learner.forget_project(pid)
     store.delete(pid)
     return state()
@@ -676,7 +695,10 @@ def media(pid: str, request: Request):
 
 @app.post("/api/quit")
 def quit_app():
-    threading.Timer(0.4, lambda: os._exit(0)).start()
+    def bye():
+        burn.abort_all()  # a running burn-in starts again next time (its status stays "running")
+        os._exit(0)
+    threading.Timer(0.4, bye).start()
     return {"ok": True}
 
 
@@ -855,6 +877,7 @@ def main():
     if port_in_use():
         print(f"Port {PORT} is used by another program. Set TEKSTING_PORT to another number.")
         return
+    store.cleanup()
     for m in store.all():  # jobs that were running when the app closed start again
         if m["status"] in ("downloading", "loading", "transcribing", "checking", "finishing"):
             store.update(m["id"], status="queued", progress=0.0, eta=None)

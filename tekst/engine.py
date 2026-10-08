@@ -74,6 +74,42 @@ def compute_peaks(path):
     return np.clip(np.sqrt(p / ref) * 255, 0, 255).astype(np.uint8).tobytes()
 
 
+def peaks_from_audio(audio, sr=16000):
+    """Same envelope as compute_peaks, from audio already in memory (saves decoding the file again)."""
+    import numpy as np
+    hop = sr // PEAK_RATE
+    n = len(audio) // hop
+    if not n:
+        return b""
+    p = np.abs(audio[: n * hop]).reshape(n, hop).max(axis=1).astype(np.float32)
+    ref = max(float(np.percentile(p, 99.5)), 1e-9)
+    return np.clip(np.sqrt(p / ref) * 255, 0, 255).astype(np.uint8).tobytes()
+
+
+def physical_cores():
+    """Physical CPU cores. Whisper runs ~25 % faster on 6 than on its default 4 threads (Ryzen 5 5625U),
+    while extra hyper-threads make it slower."""
+    n = 0
+    if os.name == "nt":
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            class INFO(ctypes.Structure):  # SYSTEM_LOGICAL_PROCESSOR_INFORMATION
+                _fields_ = [("mask", ctypes.c_size_t), ("rel", wintypes.DWORD), ("pad", ctypes.c_ubyte * 20)]
+
+            size = wintypes.DWORD(0)
+            ctypes.windll.kernel32.GetLogicalProcessorInformation(None, ctypes.byref(size))
+            buf = (INFO * (size.value // ctypes.sizeof(INFO)))()
+            if ctypes.windll.kernel32.GetLogicalProcessorInformation(buf, ctypes.byref(size)):
+                n = sum(1 for i in buf if i.rel == 0)  # RelationProcessorCore
+        except Exception:
+            n = 0
+    if not n:
+        n = max(1, (os.cpu_count() or 8) // 2)
+    return max(4, min(n, 8))
+
+
 def _dir_size(p):
     total = 0
     for root, _, files in os.walk(p):
@@ -89,8 +125,9 @@ class Engine:
     def __init__(self, models_dir):
         self.dir = Path(models_dir)
         self.dir.mkdir(parents=True, exist_ok=True)
-        self._loaded = (None, None)
-        self.lock = threading.Lock()
+        self._loaded = {}  # name -> model; large + small both stay loaded (~2 GB RAM), so a queue
+        self.lock = threading.Lock()  # of videos doesn't reload the large model for every video
+        self._audio = (None, None)  # (path, 16 kHz audio) of the video being transcribed
 
     def model_dir(self, name):
         return self.dir / name
@@ -104,8 +141,7 @@ class Engine:
 
     def delete(self, name):
         with self.lock:
-            if self._loaded[0] == name:
-                self._loaded = (None, None)
+            self._loaded.pop(name, None)
             shutil.rmtree(self.model_dir(name), ignore_errors=True)
 
     def download(self, name, on_progress, stop):
@@ -148,18 +184,32 @@ class Engine:
 
     def _model(self, name):
         with self.lock:
-            if self._loaded[0] != name:
-                self._loaded = (None, None)
+            if name not in self._loaded:
                 if FAKE:
                     m = "fake"
                 else:
                     from faster_whisper import WhisperModel
-                    m = WhisperModel(str(self.model_dir(name)), device="cpu", compute_type="int8", cpu_threads=0)
-                self._loaded = (name, m)
-            return self._loaded[1]
+                    m = WhisperModel(str(self.model_dir(name)), device="cpu", compute_type="int8",
+                                     cpu_threads=physical_cores())
+                self._loaded[name] = m
+            return self._loaded[name]
 
     def is_loaded(self, name):
-        return self._loaded[0] == name
+        return name in self._loaded
+
+    def audio(self, path):
+        """16 kHz audio of the file, decoded once per job (main model, double-check and waveform share it)."""
+        if self._audio[0] != str(path):
+            from faster_whisper.audio import decode_audio
+            self._audio = (None, None)
+            self._audio = (str(path), decode_audio(str(path), sampling_rate=SR))
+        return self._audio[1]
+
+    def cached_audio(self, path):
+        return self._audio[1] if self._audio[0] == str(path) else None
+
+    def drop_audio(self):
+        self._audio = (None, None)
 
     def plan(self, name, dur, rescue=False, loaded=None):
         """Expected seconds for each phase of transcribe() (before any real measurement)."""
@@ -195,9 +245,8 @@ class Engine:
                 on_progress(0.0, "rescue")
                 time.sleep(0.6)
             return sorted(words + (_fake_rescue(words) if rescue else []), key=lambda w: w["s"])
-        from faster_whisper.audio import decode_audio
         on_progress(0.0, "audio")
-        audio = decode_audio(str(path), sampling_rate=SR)
+        audio = self.audio(path)
         dur = len(audio) / SR
         on_progress(0.0, "vad")
         segs, info = model.transcribe(

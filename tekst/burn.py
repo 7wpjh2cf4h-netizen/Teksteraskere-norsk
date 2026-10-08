@@ -3,6 +3,8 @@ import os
 import re
 import shutil
 import subprocess
+import threading
+import time
 from pathlib import Path
 
 DEFAULT_STYLE = {
@@ -27,6 +29,20 @@ FALLBACK = ("DejaVuSans.ttf", "DejaVuSans-Bold.ttf")
 
 class Cancelled(Exception):
     pass
+
+
+_running = {}  # ffmpeg process -> its unfinished output file
+
+
+def abort_all():
+    """On quit: stop ffmpeg (it would keep running on its own) and remove its unfinished file."""
+    for proc, tmp in list(_running.items()):
+        try:
+            proc.kill()
+            proc.wait(5)
+        except Exception:
+            pass
+        Path(tmp).unlink(missing_ok=True)
 
 
 def style_of(s):
@@ -151,10 +167,22 @@ def out_path_for(video):
 
 
 def burn(video, cues, style, workdir, on_progress, stop):
-    """Render cues into a copy of the video. Returns the output path."""
+    """Render cues into a copy of the video. Returns the output path.
+    Whatever happens (done, cancelled, error), the temp folder and any unfinished file are removed."""
+    work = Path(workdir)
+    try:
+        return _burn(video, cues, style, work, on_progress, stop)
+    finally:
+        for _ in range(10):  # ffmpeg may hold the PNGs for a moment after it exits (Windows)
+            shutil.rmtree(work, ignore_errors=True)
+            if not work.exists():
+                break
+            time.sleep(0.2)
+
+
+def _burn(video, cues, style, work, on_progress, stop):
     st = style_of(style)
     W, H, dur = video_geometry(video)
-    work = Path(workdir)
     shutil.rmtree(work, ignore_errors=True)
     work.mkdir(parents=True)
     from PIL import Image
@@ -193,26 +221,45 @@ def burn(video, cues, style, workdir, on_progress, stop):
            "-movflags", "+faststart", str(tmp)]
     flags = 0x08000000 if os.name == "nt" else 0  # CREATE_NO_WINDOW
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, creationflags=flags)
-    err_lines = []
-    import threading
-    threading.Thread(target=lambda: err_lines.extend(proc.stderr.readlines()), daemon=True).start()
-    for line in proc.stdout:
+    _running[proc] = tmp
+    try:
+        err_lines = []
+        threading.Thread(target=lambda: err_lines.extend(proc.stderr.readlines()), daemon=True).start()
+        # Cancel is checked by a watcher too, so it works even while ffmpeg prints nothing
+        def watch():
+            while proc.poll() is None:
+                if stop.wait(0.5):
+                    proc.kill()
+                    return
+
+        threading.Thread(target=watch, daemon=True).start()
+        for line in proc.stdout:
+            if stop.is_set():
+                break
+            if line.startswith("out_time_us=") or line.startswith("out_time_ms="):
+                try:
+                    us = int(line.split("=")[1])
+                    if dur:
+                        on_progress(0.15 + 0.85 * min(1.0, us / 1e6 / dur))
+                except ValueError:
+                    pass
+        proc.wait()
         if stop.is_set():
-            proc.terminate()
-            proc.wait()
-            tmp.unlink(missing_ok=True)
             raise Cancelled()
-        if line.startswith("out_time_us=") or line.startswith("out_time_ms="):
+        if proc.returncode != 0:
+            raise RuntimeError("ffmpeg: " + "".join(err_lines[-3:]).strip()[:300])
+        tmp.replace(target)
+        return target
+    except BaseException:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait()
+        for _ in range(10):  # the unfinished file; Windows may keep it locked a moment after ffmpeg exits
             try:
-                us = int(line.split("=")[1])
-                if dur:
-                    on_progress(0.15 + 0.85 * min(1.0, us / 1e6 / dur))
-            except ValueError:
-                pass
-    proc.wait()
-    shutil.rmtree(work, ignore_errors=True)
-    if proc.returncode != 0:
-        tmp.unlink(missing_ok=True)
-        raise RuntimeError("ffmpeg: " + "".join(err_lines[-3:]).strip()[:300])
-    tmp.replace(target)
-    return target
+                tmp.unlink(missing_ok=True)
+                break
+            except OSError:
+                time.sleep(0.2)
+        raise
+    finally:
+        _running.pop(proc, None)
