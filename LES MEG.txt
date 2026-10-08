@@ -6,6 +6,7 @@ KOM I GANG
    (Ikke kjør den fra inne i zip-filen, og ikke legg den i "Programfiler".)
 2. Dobbeltklikk start.bat.
    - Første gang laster den ned Python og det den trenger (noen minutter, ca. 1 GB).
+   - Sørg for ca. 10 GB ledig plass (Python + talemodellene).
    - Får du "Windows beskyttet PC-en", trykk "Mer informasjon" og "Kjør likevel".
 3. Teksting åpner seg i et eget app-vindu. Første gang lages også snarveien "Teksting"
    på skrivebordet og i Start-menyen.
@@ -21,7 +22,8 @@ TIPS
 - Første video laster ned talemodellen: "Best kvalitet" er 6,2 GB, "Rask" er 1 GB.
   Det skjer bare én gang. Modellen kan også lastes ned på forhånd under Innstillinger.
 - Legg til mange videoer og la PC-en jobbe om natten. Den holdes våken mens den jobber
-  (koble til strøm!). "Best kvalitet" bruker omtrent 1,4 ganger videoens lengde.
+  (koble til strøm!). "Best kvalitet" bruker omtrent 1,5–2 ganger videoens lengde
+  (en video på 30 min tar ca. en time).
 - Har du allerede en konvertert modell (mappe med model.bin), kopier innholdet til
   data\models\large\ så slipper du nedlastingen.
 - Alt arbeidet ditt ligger i mappen "data". Ta vare på den hvis du flytter eller oppdaterer appen.
