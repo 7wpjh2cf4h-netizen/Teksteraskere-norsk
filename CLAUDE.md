@@ -91,6 +91,23 @@ Progress: engine reports `(p, phase, cap)` per phase (model/audio/vad/decode/res
 to time-weighted ranges, measures real speed during decode, sends `rate`/`cap`/`pt`; the UI extrapolates every
 250 ms so the bar moves smoothly. `time_scale()` learns this PC's speed from finished jobs (`took/expected`).
 
+### Performance (measured 2026-10-08, Ryzen 5 5625U, 6 cores / 12 threads)
+- `cpu_threads=physical_cores()` (4–8): large model 80.5 s → 59.9 s per 60 s of speech vs the default 4
+  threads, identical text. 12 threads (hyper-threads) is *slower*. Small model gains nothing.
+- Large ≈ 1× real time on this PC; a whole job (large + rescue + small double-check) ≈ 1.7× real time.
+- `Engine._loaded` keeps large + small loaded (~2 GB RAM): no reload per video in a queue (−20 s/video).
+- `Engine.audio()` decodes each file once per job (bit-identical to the old per-step decode, verified);
+  waveform via `peaks_from_audio` (correlation 0.999 with `compute_peaks`, which is still the fallback).
+- `Store` caches meta.json in memory (all writes go through it): `/api/state` with 60 videos was 71 ms,
+  polled every second. Don't edit meta.json by hand while the app runs.
+
+### Burn-in cleanup (fixed 2026-10-08)
+`burn.burn` always removes its temp folder and `.part.mp4` (done, cancelled, error). Deleting a project stops
+its transcription *and* burn-in first. Quit calls `burn.abort_all()` (kills ffmpeg; the burn-in resumes on the
+next start). `Store.cleanup()` at startup removes project folders without meta.json and stale `burn\` folders.
+Worker/Exporter use `safe_update` and catch `KeyError`, so a project deleted mid-job can't kill the thread
+(before: one delete during burn-in broke all burn-ins until restart).
+
 ### Editor features (all exist and were tested in fake mode)
 Review mode ("Gå gjennom": jumps only to flagged cues, Enter approves), find/replace, style panel for burn-in
 (font, size, colour, box, position — preview overlay matches the burned result), export menu (SRT next to the
@@ -122,10 +139,13 @@ quality, gap rescue, start.bat install.
 editor works, close-while-busy hides + auto-quit, second start re-shows, idle close quits, spell check.
 **Not yet verified on Windows**: pinning from the real shortcut (by Jonas), DPI of the file picker, SRT download
 Save dialog, new progress Tracker with real models (ETA accuracy), timeline drag.
-Found 2026-10-08: leftover `Downloads\Kongens tale_tekstet.part.mp4` (2026-10-07 17:37) and
-`data\projects\047f3f8ea9\` holding only a `burn\` folder — looks like a project deleted during a burn-in
-leaves its temp files behind. Not investigated yet. Also: i18n `offline` text still says "black window /
-start.bat", which no longer fits app mode.
+Open (2026-10-08):
+- Double-check flags varied between two app jobs on the *same* audio (4 vs 8 flags) although main-model words
+  were identical. Not reproducible outside the server: small model is deterministic alone, after large, and
+  through `Engine.transcribe` (also temperature fallback never triggered). Suspect something in the server job
+  (hotwords/prompt? thread timing?). Flags are only review hints; subtitles come from the main model.
+- i18n `offline` text still says "black window / start.bat", which no longer fits app mode.
+- `Downloads\Kongens tale_tekstet.part.mp4` (old junk from before the fix) — Jonas to delete.
 
 ## Open work (priority order)
 1. **Verify the untested Windows items above**; read `data\teksting.log` for errors.
