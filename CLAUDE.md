@@ -94,7 +94,9 @@ Ctrl+F find, Ctrl+Z/Y undo/redo. Hover tooltips only on non-obvious buttons (Jon
 - Windows only; zip + start.bat distribution; models download automatically.
 - Python is fetched by uv into the app folder (`UV_PYTHON_PREFERENCE=only-managed`), never the system Python.
 - UI is Norwegian-first, English toggle.
-- Local git only (no GitHub remote) unless Jonas asks for an off-site backup.
+- Git: local repo + private GitHub remote `origin` =
+  https://github.com/7wpjh2cf4h-netizen/Tekste-prosjekt-sebastian (branch `main`). Commit after each verified
+  change and push when a piece of work is done.
 
 ## Status: tested vs NOT tested
 Tested (Linux, fake mode + Playwright headless): every UI flow, burn-in with real ffmpeg, learning, progress bar,
