@@ -12,6 +12,8 @@ import subprocess
 import sys
 import threading
 import time
+
+T0 = time.time()  # for the startup timings in the log
 import traceback
 import urllib.parse
 import urllib.request
@@ -678,6 +680,25 @@ def quit_app():
     return {"ok": True}
 
 
+WIN = {"w": None, "hidden": False}  # Teksting's own window (app mode), see run_window
+
+
+@app.post("/api/show")
+def show_window():
+    """A second start (shortcut clicked again) brings the existing window forward instead of opening another."""
+    w = WIN["w"]
+    if not w:
+        return {"ok": False}
+    WIN["hidden"] = False
+    w.show()
+    try:
+        if str(w.native.WindowState) == "Minimized":
+            w.restore()
+    except Exception:
+        pass
+    return {"ok": True}
+
+
 @app.get("/")
 def index():
     return FileResponse(APP_DIR / "static" / "index.html", headers={"Cache-Control": "no-store"})
@@ -687,7 +708,17 @@ app.mount("/static", StaticFiles(directory=APP_DIR / "static"), name="static")
 
 
 # ------------------------------------------------------------------ main ---
+def port_in_use():
+    """Fast check: on Windows, connecting to a port nobody listens on takes ~2 s before it fails,
+    while a local server answers at once - so give up after 0.3 s."""
+    with socket.socket() as s:
+        s.settimeout(0.3)
+        return s.connect_ex(("127.0.0.1", PORT)) == 0
+
+
 def already_running():
+    if not port_in_use():
+        return False
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/api/ping", timeout=1) as r:
             return json.load(r).get("app") == "teksting"
@@ -719,6 +750,71 @@ def open_ui(url):
     webbrowser.open(url)
 
 
+def wait_until_ready():
+    """Wait for the server to answer, so the window never shows a 'site not available' page."""
+    for _ in range(150):  # up to 30 s on a slow PC
+        if already_running():
+            return
+        time.sleep(0.2)
+
+
+def warm_speller():
+    """Loading the dictionary takes ~10 s of pure Python and slows everything else down,
+    so it waits until the server answers and the window has had time to open."""
+    wait_until_ready()
+    time.sleep(6 if APP_MODE else 0)
+    speller.warm(store.settings()["language"])
+
+
+def open_when_ready(url):
+    wait_until_ready()
+    open_ui(url)
+
+
+APP_ID = "Teksting.Teksting"  # same ID on the shortcuts (lag-snarveier.ps1) -> one taskbar button, pinnable
+
+
+def run_window(url, owner):
+    """Teksting's own window (WebView2 via pywebview): own taskbar button and icon, no browser involved.
+    Blocks until the window is closed. Returns False if no window could be made (then use a browser)."""
+    try:
+        import ctypes
+        import webview
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_ID)
+    except Exception as e:
+        print("Own window not available, using a browser:", e)
+        return False
+    webview.settings["ALLOW_DOWNLOADS"] = True  # "Last ned SRT" opens a save dialog
+    if os.environ.get("TEKSTING_DEBUG_PORT"):  # dev: inspect the window with Chrome DevTools
+        webview.settings["REMOTE_DEBUGGING_PORT"] = int(os.environ["TEKSTING_DEBUG_PORT"])
+    w = webview.create_window("Teksting", url, width=1440, height=900, min_size=(400, 500))
+
+    def on_closing():
+        # Closing while a video is transcribing hides the window; the job finishes, then the app quits.
+        if owner and busy():
+            WIN["hidden"] = True
+            threading.Timer(0.05, w.hide).start()
+            return False
+
+    w.events.closing += on_closing
+    # Teksting.vbs starts pythonw hidden; Windows applies that to our first window, so show it again.
+    def on_shown():
+        w.show()
+        print(f"  window shown after {time.time() - T0:.1f} s")
+
+    w.events.shown += on_shown
+    WIN["w"] = w
+    try:
+        webview.start(gui="edgechromium", private_mode=False, storage_path=str(DATA / "webview"),
+                      icon=str(APP_DIR / "static" / "teksting.ico"))
+    except Exception as e:
+        WIN["w"] = None
+        print("Own window failed, using a browser:", e)
+        traceback.print_exc()
+        return False
+    return True
+
+
 def busy():
     return bool(worker.current or exporter.current or any(
         (m["status"] == "queued" and not worker.paused) or (m.get("export") or {}).get("status") in ("queued", "running")
@@ -730,7 +826,10 @@ def watchdog():
     limit = float(os.environ.get("TEKSTING_IDLE_EXIT", "90"))
     while True:
         time.sleep(min(20.0, limit / 2))
-        if time.time() - LAST_SEEN[0] > limit and not busy():
+        if WIN["w"]:  # own window: quit once it is hidden and the last job is done
+            if WIN["hidden"] and not busy():
+                os._exit(0)
+        elif time.time() - LAST_SEEN[0] > limit and not busy():
             os._exit(0)
 
 
@@ -741,12 +840,21 @@ def main():
         sys.stdout = sys.stderr = log
         print("\n---", time.strftime("%Y-%m-%d %H:%M:%S"), "starting")
     if already_running():
+        if APP_MODE:
+            try:
+                req = urllib.request.Request(f"{url}api/show", data=b"", method="POST")
+                with urllib.request.urlopen(req, timeout=3) as r:
+                    if json.load(r).get("ok"):
+                        return
+            except Exception:
+                pass
+            if run_window(url, owner=False):
+                return
         open_ui(url)
         return
-    with socket.socket() as s:
-        if s.connect_ex(("127.0.0.1", PORT)) == 0:
-            print(f"Port {PORT} is used by another program. Set TEKSTING_PORT to another number.")
-            return
+    if port_in_use():
+        print(f"Port {PORT} is used by another program. Set TEKSTING_PORT to another number.")
+        return
     for m in store.all():  # jobs that were running when the app closed start again
         if m["status"] in ("downloading", "loading", "transcribing", "checking", "finishing"):
             store.update(m["id"], status="queued", progress=0.0, eta=None)
@@ -754,14 +862,26 @@ def main():
             store.update(m["id"], export={"status": "queued"})
     worker.start()
     exporter.start()
-    threading.Thread(target=speller.warm, args=(store.settings()["language"],), daemon=True).start()
+    threading.Thread(target=warm_speller, daemon=True).start()
+    print("\n  Teksting is running:", url)
+    import uvicorn
+    if APP_MODE and os.name == "nt" and os.environ.get("TEKSTING_NO_BROWSER") != "1":
+        # The window must own the main thread, so the server runs beside it.
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=PORT, log_level="warning"))
+        threading.Thread(target=server.run, daemon=True).start()
+        threading.Thread(target=watchdog, daemon=True).start()
+        wait_until_ready()
+        print(f"  server ready after {time.time() - T0:.1f} s")
+        if run_window(url, owner=True):
+            os._exit(0)  # window closed and nothing running (closing while busy only hides it)
+        open_ui(url)  # no WebView2: fall back to a browser window, quit via the watchdog as before
+        while True:
+            time.sleep(3600)
     if os.environ.get("TEKSTING_NO_BROWSER") != "1":
-        threading.Timer(1.2, lambda: open_ui(url)).start()
+        threading.Thread(target=open_when_ready, args=(url,), daemon=True).start()
     if APP_MODE:
         threading.Thread(target=watchdog, daemon=True).start()
-    print("\n  Teksting is running:", url)
     print("  Keep this window open while you work. Close it to quit.\n")
-    import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=PORT, log_level="warning")
 
 

@@ -27,4 +27,5 @@ If rc <> 0 Then
   WScript.Quit
 End If
 
-sh.Run """" & pyw & """ """ & here & "\server.py"" --app", 0, False
+' Window style 1, not 0: pythonw has no console anyway, and 0 would also hide Teksting's own window
+sh.Run """" & pyw & """ """ & here & "\server.py"" --app", 1, False

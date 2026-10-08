@@ -6,3 +6,4 @@ spylls>=0.1.7
 huggingface_hub>=0.23
 pillow>=10.1
 imageio-ffmpeg>=0.5
+pywebview>=6.2
