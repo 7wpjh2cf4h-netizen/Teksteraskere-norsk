@@ -31,7 +31,8 @@ All tunables: `tekst/segment.py` class `P`; user-editable subset in Settings →
   Port 8766 so it can run alongside Jonas's real app on 8765.
 - Env vars: `TEKSTING_FAKE=1`, `TEKSTING_DATA` (data folder, default `data\`), `TEKSTING_PORT` (8765),
   `TEKSTING_NO_BROWSER=1`, `TEKSTING_APP=1` or `--app` (Edge/Chrome app window + auto-exit),
-  `TEKSTING_IDLE_EXIT` (seconds, default 90).
+  `TEKSTING_IDLE_EXIT` (seconds, default 90, browser fallback only), `TEKSTING_DEBUG_PORT` (dev: Chrome DevTools
+  port for the app window, e.g. 9333 → http://127.0.0.1:9333/json; drive it with a CDP script).
 - Log when started from the shortcut: `data\teksting.log`.
 - Build the zip for the friend: `powershell -ExecutionPolicy Bypass -File dev\pack.ps1` → `dist\Teksting.zip`
   (code only, CRLF for .bat/.vbs/.ps1/.txt; never include `data\`, `.venv\`, `runtime\`).
@@ -44,7 +45,7 @@ FastAPI + uvicorn backend, vanilla-JS single-page app (no build step), files on 
 
 | File | What it does |
 |---|---|
-| `server.py` | API, background `Worker` (transcription queue, one job at a time), `Exporter` (burn-in queue), `Tracker` (phase-weighted progress + ETA), app mode (Edge `--app` window, watchdog auto-exit when window closed and idle), Windows keep-awake while busy, tkinter file picker in a subprocess (DPI-aware) |
+| `server.py` | API, background `Worker` (transcription queue, one job at a time), `Exporter` (burn-in queue), `Tracker` (phase-weighted progress + ETA), app mode (own window via pywebview/WebView2, see below; Chrome/Edge `--app` only as fallback), Windows keep-awake while busy, tkinter file picker in a subprocess (DPI-aware) |
 | `tekst/engine.py` | Model download (HF `NbAiLab/nb-whisper-{small,medium,large}`, ready-made `ct2/` folders + tokenizer/preprocessor files), faster-whisper transcription, **gap rescue**, `listen` (re-transcribe one cue), waveform peaks, fake mode |
 | `tekst/segment.py` | Words → cues: filler removal, DP segmentation with break costs, line splitting, timing rules, SRT writer |
 | `tekst/compare.py` | Disagreements between the main model and the fast model (double-check) |
@@ -59,6 +60,21 @@ FastAPI + uvicorn backend, vanilla-JS single-page app (no build step), files on 
 
 Project folder files: `meta.json`, `words.jsonl` (word timings), `cues.json` (current), `cues_orig.json`
 (as produced, for learning), `disagree.json`, `rescued.json`, `autofix.json`, `peaks.bin` (uint8, 50/s).
+
+### App window (app mode, since 2026-10-08)
+`run_window` in `server.py`: pywebview (`gui="edgechromium"`, WebView2 is built into Windows) owns the main
+thread, uvicorn runs in a thread beside it. Process AppUserModelID `Teksting.Teksting` = the ID that
+`lag-snarveier.ps1` writes on the shortcuts → one taskbar button with the Teksting icon, and pinning works.
+(Replaced the Chrome/Edge `--app` window: it showed the Chrome icon and its pin just opened Chrome.)
+- Closing the window when idle quits at once. Closing while a job runs only **hides** it; the watchdog quits
+  when the last job is done. Starting again (shortcut) while running → `POST /api/show` brings the window back.
+- `Teksting.vbs` must start pythonw with window style 1, not 0: Windows applies the "hidden" start to the
+  first window. `run_window` also re-shows on the `shown` event, as a safety net.
+- Startup timings go to the log ("server ready after", "window shown after"); ~4 s on Jonas's PC.
+  Two traps found: the nb dictionary takes ~10 s of pure Python to load (now `warm_speller`, after the
+  window is up), and on Windows a connect to a closed port takes ~2 s (now `port_in_use`, 0.3 s timeout).
+- WebView2 with pywebview's defaults: no browser right-click menu, no browser shortcuts (Ctrl+F reaches the
+  app). Downloads ("Last ned SRT") show a Save dialog (`ALLOW_DOWNLOADS`).
 
 ### Transcription pipeline (Worker.process)
 1. Ensure models downloaded (main + `small` if double-check is on).
@@ -102,11 +118,14 @@ Ctrl+F find, Ctrl+Z/Y undo/redo. Hover tooltips only on non-obvious buttons (Jon
 Tested (Linux, fake mode + Playwright headless): every UI flow, burn-in with real ffmpeg, learning, progress bar,
 timeline drag, app-mode watchdog. Tested with real models (by Jonas on Windows, earlier versions): transcription
 quality, gap rescue, start.bat install.
-**Not yet verified on Windows**: shortcuts + `Teksting.vbs` hidden launch, Edge app window, taskbar pinning
-(pinned shortcut may show as a separate taskbar button from the window), DPI fix for the file picker, new progress
-Tracker with real models (ETA accuracy), timeline drag in Edge.
-Found 2026-10-08: no `data\teksting.log` yet (shortcut launch probably never used), and a leftover
-`Downloads\Kongens tale_tekstet.part.mp4` from 2026-10-07 17:37 — possibly an interrupted or failed burn-in.
+**Verified on Windows 2026-10-08** (fake mode, via CDP on the real window): own window opens, video plays,
+editor works, close-while-busy hides + auto-quit, second start re-shows, idle close quits, spell check.
+**Not yet verified on Windows**: pinning from the real shortcut (by Jonas), DPI of the file picker, SRT download
+Save dialog, new progress Tracker with real models (ETA accuracy), timeline drag.
+Found 2026-10-08: leftover `Downloads\Kongens tale_tekstet.part.mp4` (2026-10-07 17:37) and
+`data\projects\047f3f8ea9\` holding only a `burn\` folder — looks like a project deleted during a burn-in
+leaves its temp files behind. Not investigated yet. Also: i18n `offline` text still says "black window /
+start.bat", which no longer fits app mode.
 
 ## Open work (priority order)
 1. **Verify the untested Windows items above**; read `data\teksting.log` for errors.
@@ -124,4 +143,6 @@ Found 2026-10-08: no `data\teksting.log` yet (shortcut launch probably never use
 - Long-running work goes through `Worker`/`Exporter`, never in a request handler.
 - After changing UI, test in fake mode at 1440×900 and a narrow (~400 px) window, light and dark.
 - Never edit files in `data\` by hand while the app runs.
+- Python scripts that rewrite files: `write_text(..., newline="
+")` (Windows otherwise writes CRLF).
 - Git: `.gitattributes` keeps `.bat/.vbs/.ps1/.txt` CRLF. Commit after each verified change.
