@@ -22,10 +22,10 @@ Line breaks avoid ending a line on weak words (articles, prepositions, adjective
 All tunables: `tekst/segment.py` class `P`; user-editable subset in Settings → "Regler for undertekster".
 
 ## Run it
-- **Users**: double-click `start.bat` once (downloads uv → Python 3.12 → packages into `runtime\` and `.venv\`,
+- **Users**: double-click `start.bat` once (downloads uv → Python 3.12 → packages into `runtime\` — no venv, see below,
   creates Desktop + Start-menu shortcut "Teksting" via `lag-snarveier.ps1`), then use the shortcut
   (`Teksting.vbs` → hidden `pythonw server.py --app`).
-- **Dev, real models**: `.venv\Scripts\python.exe server.py` → http://127.0.0.1:8765
+- **Dev, real models**: `runtime\python\cpython-3.12.15-windows-x86_64-none\python.exe server.py` → http://127.0.0.1:8765
 - **Dev, fake mode (no models, instant)**: `dev\run_fake.bat` → http://127.0.0.1:8766 — fake transcripts,
   fake downloads, separate data folder `dev\fakedata`. Add any short .mp4 as a video. Use this for all UI work.
   Port 8766 so it can run alongside Jonas's real app on 8765.
@@ -35,7 +35,7 @@ All tunables: `tekst/segment.py` class `P`; user-editable subset in Settings →
   port for the app window, e.g. 9333 → http://127.0.0.1:9333/json; drive it with a CDP script).
 - Log when started from the shortcut: `data\teksting.log`.
 - Build the zip for the friend: `powershell -ExecutionPolicy Bypass -File dev\pack.ps1` → `dist\Teksting.zip`
-  (code only, CRLF for .bat/.vbs/.ps1/.txt; never include `data\`, `.venv\`, `runtime\`).
+  (code only, CRLF for .bat/.vbs/.ps1/.txt; never include `data\`, `runtime\`).
   Gmail blocks this zip (it contains .bat/.vbs) — share via OneDrive link.
 - `dev\run_fake.bat` and `dev\pack.ps1` were recreated in Claude Code on 2026-10-08 (the originals never left
   the claude.ai session).
@@ -127,6 +127,13 @@ Ctrl+F find, Ctrl+Z/Y undo/redo. Hover tooltips only on non-obvious buttons (Jon
 - Windows only; zip + start.bat distribution; models download automatically.
 - Python is fetched by uv into the app folder (`UV_PYTHON_PREFERENCE=only-managed`), never the system Python.
 - UI is Norwegian-first, English toggle.
+- **No virtual environment** (since 2026-10-08): packages go straight into uv's Python in
+  `runtime\python\cpython-3.12*` (`uv pip install --python <it> --break-system-packages`). Reason: on the
+  friend's company PC the venv launcher `.venv\Scripts\python.exe` was blocked ("Ingen tilgang", os error 5)
+  while uv's own python.exe ran fine. `uv python install --no-bin --no-registry` so nothing is written outside
+  the folder. start.bat, Teksting.vbs and devun_fake.bat find Python by globbing `cpython-3.12*`.
+  `TEKSTING_NO_SHORTCUTS=1` makes start.bat skip the shortcuts (for testing a fresh install).
+  Tested: fresh install from the zip into a folder with a space → app up in ~55 s; shortcut route works.
 - Git: local repo + private GitHub remote `origin` =
   https://github.com/7wpjh2cf4h-netizen/Tekste-prosjekt-sebastian (branch `main`). Commit after each verified
   change and push when a piece of work is done.

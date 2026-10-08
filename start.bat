@@ -10,7 +10,6 @@ set "UV=%HERE%runtime\uv.exe"
 set "UV_CACHE_DIR=%HERE%runtime\uv-cache"
 set "UV_PYTHON_INSTALL_DIR=%HERE%runtime\python"
 set "UV_PYTHON_PREFERENCE=only-managed"
-set "PY=%HERE%.venv\Scripts\python.exe"
 
 if not exist "%UV%" (
   echo.
@@ -22,20 +21,31 @@ if not exist "%UV%" (
   if not exist "%UV%" goto fail
 )
 
-if not exist "%PY%" (
-  "%UV%" venv --python 3.12 "%HERE%.venv"
+rem Python lives in runtime\python. No virtual environment: its launcher (.venv\Scripts\python.exe)
+rem is a freshly made, unsigned .exe that company antivirus can block ("Ingen tilgang").
+call :findpy
+if not defined PY (
+  rem --no-bin / --no-registry: nothing outside this folder (no python.exe in .local\bin, no registry entry)
+  "%UV%" python install 3.12 --no-bin --no-registry
   if errorlevel 1 goto fail
+  call :findpy
 )
+if not defined PY goto fail
 
-"%UV%" pip install --python "%PY%" --quiet -r "%HERE%requirements.txt"
+"%UV%" pip install --python "%PY%" --break-system-packages --quiet -r "%HERE%requirements.txt"
 if errorlevel 1 goto fail
 
 rem Desktop + Start menu shortcuts with icon (right-click the Start menu entry to pin it to the taskbar)
-powershell -NoProfile -ExecutionPolicy Bypass -File "%HERE%lag-snarveier.ps1" >nul 2>&1
+if not "%TEKSTING_NO_SHORTCUTS%"=="1" powershell -NoProfile -ExecutionPolicy Bypass -File "%HERE%lag-snarveier.ps1" >nul 2>&1
 
 "%PY%" "%HERE%server.py" --app
 if errorlevel 1 goto fail
 goto end
+
+:findpy
+set "PY="
+for /d %%D in ("%HERE%runtime\python\cpython-3.12*") do if exist "%%D\python.exe" set "PY=%%D\python.exe"
+exit /b 0
 
 :fail
 echo.
