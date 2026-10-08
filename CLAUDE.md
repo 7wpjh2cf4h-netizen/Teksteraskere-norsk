@@ -131,7 +131,7 @@ Ctrl+F find, Ctrl+Z/Y undo/redo. Hover tooltips only on non-obvious buttons (Jon
   `runtime\python\cpython-3.12*` (`uv pip install --python <it> --break-system-packages`). Reason: on the
   friend's company PC the venv launcher `.venv\Scripts\python.exe` was blocked ("Ingen tilgang", os error 5)
   while uv's own python.exe ran fine. `uv python install --no-bin --no-registry` so nothing is written outside
-  the folder. start.bat, Teksting.vbs and devun_fake.bat find Python by globbing `cpython-3.12*`.
+  the folder. start.bat, Teksting.vbs and devun_fake.bat find Python by globbing `cpython-3.12*`.
   `TEKSTING_NO_SHORTCUTS=1` makes start.bat skip the shortcuts (for testing a fresh install).
   Tested: fresh install from the zip into a folder with a space → app up in ~55 s; shortcut route works.
 - Git: local repo + private GitHub remote `origin` =
