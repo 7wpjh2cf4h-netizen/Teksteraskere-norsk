@@ -1,0 +1,73 @@
+TEKSTING – norske undertekster til video, på din egen PC (Windows)
+====================================================================
+
+KOM I GANG
+1. Pakk ut hele zip-filen til en vanlig mappe, for eksempel Dokumenter\Teksting.
+   (Ikke kjør den fra inne i zip-filen, og ikke legg den i "Programfiler".)
+2. Dobbeltklikk start.bat.
+   - Første gang laster den ned Python og det den trenger (noen minutter, ca. 1 GB).
+   - Får du "Windows beskyttet PC-en", trykk "Mer informasjon" og "Kjør likevel".
+3. Teksting åpner seg i et eget app-vindu. Første gang lages også snarveien "Teksting"
+   på skrivebordet og i Start-menyen.
+4. Heretter: start Teksting fra snarveien (ikke start.bat). Da kommer ikke det svarte vinduet.
+5. Fest til oppgavelinjen: Start-menyen > høyreklikk "Teksting" > "Fest til oppgavelinjen".
+
+AVSLUTTE
+- Trykk "Avslutt" i appen, eller bare lukk vinduet. Lukker du vinduet mens videoer står i kø,
+  jobber Teksting videre i bakgrunnen og avslutter seg selv når alt er ferdig.
+  Åpne snarveien igjen for å se fremdriften.
+
+TIPS
+- Første video laster ned talemodellen: "Best kvalitet" er 6,2 GB, "Rask" er 1 GB.
+  Det skjer bare én gang. Modellen kan også lastes ned på forhånd under Innstillinger.
+- Legg til mange videoer og la PC-en jobbe om natten. Den holdes våken mens den jobber
+  (koble til strøm!). "Best kvalitet" bruker omtrent 1,4 ganger videoens lengde.
+- Har du allerede en konvertert modell (mappe med model.bin), kopier innholdet til
+  data\models\large\ så slipper du nedlastingen.
+- Alt arbeidet ditt ligger i mappen "data". Ta vare på den hvis du flytter eller oppdaterer appen.
+- Ingenting lastes opp. Bare modellene og stavelisten lastes ned fra internett.
+
+KORREKTURLESING (raskest slik)
+- Trykk «Gå gjennom». Appen hopper bare til undertekstene som trenger et blikk, spiller dem av,
+  og du retter og trykker Enter for å godkjenne. Resten trenger du ikke se på.
+- Gult/oransje merke: stavefeil, for rask lesehastighet, for lang linje eller stedet der den raske
+  og den beste modellen hørte forskjellig («Rask modell hørte …» – trykk «Bruk» hvis den har rett).
+- Feil trykk? «Angre» (Ctrl+Z) angrer også deling, sammenslåing og sletting. «Gjør om» = Ctrl+Y.
+- Søk og erstatt (Ctrl+F) retter et navn overalt på en gang.
+- Mangler en setning? Appen lytter automatisk på nytt der det er lyd men ingen tekst, og merker
+  det den henter inn («hoppet over dette først»). Mangler det fortsatt noe: sett avspillingen der,
+  trykk «Ny undertekst her», så foreslår modellen teksten. «Hør på nytt» virker på alle undertekster.
+- Hurtigtaster (utenfor tekstfelt): Mellomrom = spill/pause, piltast venstre/høyre = 5 sek, opp/ned = forrige/neste,
+  Enter = skriv i underteksten, Esc = gå ut av tekstfeltet. Trykk ? for hele listen. Hold musen over en knapp for forklaring.
+
+APPEN BLIR BEDRE JO MER DU BRUKER DEN
+- Teksting lærer av rettelsene dine. Retter du samme feil i 2 videoer (f.eks. «Telenord» til «Telenor»),
+  rettes den automatisk i nye videoer og merkes grønt («Rettet automatisk»). Se og styr listen under
+  Innstillinger > Lærte rettelser. Angrer du en automatisk rettelse, slutter appen å bruke den.
+- Ordlisten og de lærte rettelsene gis til modellen som stikkord, så den hører navn riktigere.
+- Arbeidstiden måles mens du er aktiv i korrekturvisningen. På Videoer-siden ser du minutter arbeid
+  per videominutt og hvor mye av teksten du måtte endre. Målet er under 6 minutter per videominutt.
+
+EKSPORT
+- SRT-fil: til nettsider/spillere der seerne kan slå teksting av og på. Spilleren bestemmer utseendet.
+- Video med innbrent tekst: teksten blir en del av bildet. Utseendet velger du under «Stil»
+  (skrift, størrelse, farge, boks, plassering). Lagres som «navn_tekstet.mp4» ved siden av originalen.
+- På Videoer-siden kan du eksportere alle ferdige videoer på en gang.
+
+HVIS NOE GÅR GALT
+- Starter ikke appen fra snarveien? Dobbeltklikk start.bat, så ser du feilmeldingen.
+- Feillogg: data\teksting.log (send den til den som ga deg appen).
+- Ta et skjermbilde av det svarte vinduet og send det til den som ga deg appen.
+- "DLL load failed": installer "Microsoft Visual C++ Redistributable (x64)" fra Microsoft og prøv igjen.
+- Videoen spilles ikke av i korrekturvisningen: formatet støttes ikke av nettleseren.
+  Teksten kan fortsatt redigeres. MP4 fra vanlige kameraer og telefoner fungerer.
+
+
+ENGLISH (short)
+Unzip, double-click start.bat. The first start downloads Python and packages; the first video
+downloads the speech model (6.2 GB for best quality). After that, start it from the "Teksting"
+shortcut (desktop / Start menu); right-click it in the Start menu to pin it to the taskbar.
+Closing the window is fine: queued videos keep processing and the app exits when done.
+Your work lives in the "data" folder. Nothing is uploaded.
+
+Laget med NB-Whisper fra Nasjonalbiblioteket (Apache 2.0) og LibreOffice sine norske ordbøker.

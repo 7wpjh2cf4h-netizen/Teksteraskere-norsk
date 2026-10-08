@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="nb">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Teksting</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4F78'/%3E%3Crect x='6' y='18' width='20' height='3.2' rx='1.6' fill='%23FFD84D'/%3E%3Crect x='9' y='23.5' width='14' height='3.2' rx='1.6' fill='%23FFD84D'/%3E%3C/svg%3E">
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#1f4f78">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#/" aria-label="Teksting">
+    <svg viewBox="0 0 32 32" width="22" height="22" aria-hidden="true"><rect width="32" height="32" rx="7" fill="var(--brand)"/><rect x="6" y="18" width="20" height="3.2" rx="1.6" fill="var(--cue)"/><rect x="9" y="23.5" width="14" height="3.2" rx="1.6" fill="var(--cue)"/></svg>
+    <span>Teksting</span>
+  </a>
+  <nav class="nav">
+    <a href="#/" data-nav="jobs" data-t="nav_jobs"></a>
+    <a href="#/settings" data-nav="settings" data-t="nav_settings"></a>
+  </nav>
+  <div class="top-right">
+    <button class="link" id="lang-toggle" type="button"></button>
+    <button class="link" id="quit" type="button" data-t="quit"></button>
+  </div>
+</header>
+<div id="offline" class="offline" hidden data-t="offline"></div>
+<main id="view"></main>
+<div id="toasts" class="toasts" aria-live="polite"></div>
+<dialog id="dialog" class="dialog">
+  <form method="dialog">
+    <h2 id="dlg-title"></h2>
+    <p id="dlg-body"></p>
+    <div class="dlg-actions">
+      <button value="cancel" class="btn" id="dlg-cancel"></button>
+      <button value="ok" class="btn primary" id="dlg-ok"></button>
+    </div>
+  </form>
+</dialog>
+<script src="/static/i18n.js"></script>
+<script src="/static/editor.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

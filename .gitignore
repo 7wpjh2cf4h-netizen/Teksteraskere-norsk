@@ -1,0 +1,9 @@
+# Your work, models, Python - never in git or the zip
+data/
+.venv/
+runtime/
+dist/
+dev/fakedata/
+__pycache__/
+*.pyc
+*.log

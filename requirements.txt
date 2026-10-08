@@ -1,0 +1,8 @@
+faster-whisper>=1.1
+av>=12,<17
+fastapi>=0.110
+uvicorn>=0.29
+spylls>=0.1.7
+huggingface_hub>=0.23
+pillow>=10.1
+imageio-ffmpeg>=0.5
