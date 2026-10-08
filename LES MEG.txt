@@ -22,8 +22,8 @@ TIPS
 - Første video laster ned talemodellen: "Best kvalitet" er 6,2 GB, "Rask" er 1 GB.
   Det skjer bare én gang. Modellen kan også lastes ned på forhånd under Innstillinger.
 - Legg til mange videoer og la PC-en jobbe om natten. Den holdes våken mens den jobber
-  (koble til strøm!). "Best kvalitet" bruker omtrent 1,5–2 ganger videoens lengde
-  (en video på 30 min tar ca. en time).
+  (koble til strøm!). "Best kvalitet" bruker omtrent 1,4 ganger videoens lengde
+  (en video på 30 min tar ca. 45 min, litt mer på en tregere PC).
 - Har du allerede en konvertert modell (mappe med model.bin), kopier innholdet til
   data\models\large\ så slipper du nedlastingen.
 - Alt arbeidet ditt ligger i mappen "data". Ta vare på den hvis du flytter eller oppdaterer appen.
