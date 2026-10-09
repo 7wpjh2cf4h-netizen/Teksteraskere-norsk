@@ -34,6 +34,8 @@ if not defined PY goto fail
 
 "%UV%" pip install --python "%PY%" --break-system-packages --quiet -r "%HERE%requirements.txt"
 if errorlevel 1 goto fail
+rem Teksting.vbs skips the package check while requirements.txt matches this copy
+copy /y "%HERE%requirements.txt" "%HERE%runtime\requirements.installed" >nul
 
 rem Desktop + Start menu shortcuts with icon (right-click the Start menu entry to pin it to the taskbar)
 if not "%TEKSTING_NO_SHORTCUTS%"=="1" powershell -NoProfile -ExecutionPolicy Bypass -File "%HERE%lag-snarveier.ps1" >nul 2>&1

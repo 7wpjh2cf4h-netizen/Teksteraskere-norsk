@@ -28,12 +28,23 @@ env("UV_PYTHON_INSTALL_DIR") = here & "\runtime\python"
 env("UV_PYTHON_PREFERENCE") = "only-managed"
 sh.CurrentDirectory = here
 
-' Keep packages in step with requirements.txt after an update (takes a second when nothing changed)
-rc = sh.Run("""" & uv & """ pip install --python """ & py & """ --break-system-packages --quiet -r """ & here & "\requirements.txt""", 0, True)
-If rc <> 0 Then
-  sh.Run """" & here & "\start.bat""", 1, False
-  WScript.Quit
+' Keep packages in step with requirements.txt after an update. Only when it changed since the last install
+' (runtime\requirements.installed): even "nothing to do" can take ~8 s right after a reboot.
+If ReadAll(here & "\requirements.txt") <> ReadAll(here & "\runtime\requirements.installed") Then
+  rc = sh.Run("""" & uv & """ pip install --python """ & py & """ --break-system-packages --quiet -r """ & here & "\requirements.txt""", 0, True)
+  If rc <> 0 Then
+    sh.Run """" & here & "\start.bat""", 1, False
+    WScript.Quit
+  End If
+  fso.CopyFile here & "\requirements.txt", here & "\runtime\requirements.installed", True
 End If
+
+Function ReadAll(path)
+  ReadAll = ""
+  If fso.FileExists(path) Then
+    If fso.GetFile(path).Size > 0 Then ReadAll = fso.OpenTextFile(path, 1).ReadAll()
+  End If
+End Function
 
 ' Window style 1, not 0: pythonw has no console anyway, and 0 would also hide Teksting's own window
 sh.Run """" & pyw & """ """ & here & "\server.py"" --app", 1, False

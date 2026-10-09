@@ -62,14 +62,21 @@ Project folder files: `meta.json`, `words.jsonl` (word timings), `cues.json` (cu
 (as produced, for learning), `disagree.json`, `rescued.json`, `autofix.json`, `peaks.bin` (uint8, 50/s).
 
 ### App window (app mode, since 2026-10-08)
-`run_window` in `server.py`: pywebview (`gui="edgechromium"`, WebView2 is built into Windows) owns the main
-thread, uvicorn runs in a thread beside it. Process AppUserModelID `Teksting.Teksting` = the ID that
+`tekst/launch.py` (server.py hands over at the top, before importing FastAPI): pywebview (`gui="edgechromium"`,
+WebView2 is built into Windows) owns the main thread and opens at once with `static/loading.html`; a thread
+imports `server` and runs uvicorn beside it (`serve_in_background`). The loading page (a small typewriter
+typing "Teksting" with a yellow subtitle bar, app tokens, light/dark) pings `/api/ping` (fetch no-cors) and
+switches to the app itself; once ready it finishes the word fast (no waiting on the animation).
+Warm start, fake mode: loading screen 2.6 s, server 3.6 s, app ~4.2 s (was a blank 3.8 s). A "Hail the
+king" intro with Jonas's face was built and dropped on 2026-10-09 — he chose minimal and classy instead.
+`Teksting.vbs` skips the uv package check unless requirements.txt differs from `runtime\requirements.installed`
+(written by start.bat / the vbs): right after a reboot that no-op check took 7.8 s. Process AppUserModelID `Teksting.Teksting` = the ID that
 `lag-snarveier.ps1` writes on the shortcuts → one taskbar button with the Teksting icon, and pinning works.
 (Replaced the Chrome/Edge `--app` window: it showed the Chrome icon and its pin just opened Chrome.)
 - Closing the window when idle quits at once. Closing while a job runs only **hides** it; the watchdog quits
   when the last job is done. Starting again (shortcut) while running → `POST /api/show` brings the window back.
 - `Teksting.vbs` must start pythonw with window style 1, not 0: Windows applies the "hidden" start to the
-  first window. `run_window` also re-shows on the `shown` event, as a safety net.
+  first window. `launch.py` also re-shows on the `shown` event, as a safety net.
 - Startup timings go to the log ("server ready after", "window shown after"); ~4 s on Jonas's PC.
   Two traps found: the nb dictionary takes ~10 s of pure Python to load (now `warm_speller`, after the
   window is up), and on Windows a connect to a closed port takes ~2 s (now `port_in_use`, 0.3 s timeout).
