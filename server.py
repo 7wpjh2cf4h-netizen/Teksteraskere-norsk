@@ -509,7 +509,9 @@ def get_project(pid: str):
             "pause_on_type": s.get("pause_on_type", True), "disagree": store.load_json(pid, "disagree.json", []),
             "rescued": store.load_json(pid, "rescued.json", []),
             "autofix": store.load_json(pid, "autofix.json", []),
-            "peak_rate": PEAK_RATE}
+            "peak_rate": PEAK_RATE,
+            # model words as [start, end, confidence, text]: uncertain-word hints and snapping in the editor
+            "words": [[w["s"], w["e"], w.get("p", 1.0), w["w"].strip()] for w in store.words(pid)]}
 
 
 @app.put("/api/projects/{pid}/cues")
@@ -551,6 +553,14 @@ def compute_stats(pid):
         pass
     except Exception:
         traceback.print_exc()
+
+
+@app.post("/api/projects/{pid}/resume")
+def resume(pid: str, sel: int = Body(...), t: float = Body(...)):
+    """Where proofreading stopped (selected subtitle + video time); the editor opens there next time."""
+    project(pid)
+    safe_update(pid, resume={"sel": max(0, int(sel)), "t": max(0.0, float(t))})
+    return {"ok": True}
 
 
 @app.post("/api/projects/{pid}/worktime")

@@ -1,6 +1,14 @@
 "use strict";
 /* Teksting - proofreading editor. Uses helpers from app.js (h, t, api, toast, ask, fmtTC, ...). */
 
+// A word the model gave less than this confidence is shown as "uncertain". Measured on NB-Whisper large:
+// below 0.5 is ~1 % of words (and caught a real error, "Hygo" for "Kygo"); below 0.6 it is already 9 %.
+// segment.py's old low_prob flag was switched off as "mostly noise" - check this against real SRTs.
+const UNSURE_P = 0.5;
+const SNAP_TAIL = 0.3;   // segment.P.tail: a subtitle ends this long after its last word
+const SPEEDS = [0.75, 1, 1.25, 1.5];
+const norm = (w) => w.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+
 const FONTS = ["Arial", "Segoe UI", "Calibri", "Verdana", "Tahoma", "Trebuchet MS", "Georgia", "Times New Roman"];
 
 class Editor {
@@ -55,7 +63,13 @@ class Editor {
     this.peakRate = d.peak_rate || 50;
     this.cues = d.cues.map((c) => ({ ...c }));
     this.sort();
+    // model words: [start, end, confidence, text]
+    const words = (d.words || []).map(([ws, we, wp, w]) => ({ s: ws, e: we, p: wp, w }));
+    this.unsure = words.filter((w) => w.p < UNSURE_P && norm(w.w)).map((w) => ({ ...w, n: norm(w.w) }));
+    this.starts = words.map((w) => w.s).sort((a, b) => a - b);
+    this.ends = words.map((w) => w.e + SNAP_TAIL).sort((a, b) => a - b);
     this.build();
+    this.resumeAt(d.meta.resume);
     document.addEventListener("keydown", this.onKey);
     window.addEventListener("resize", this.onResize);
     this.spellAll();
@@ -87,6 +101,7 @@ class Editor {
 
   async destroy() {
     clearInterval(this.workTimer);
+    this.saveResume(true);
     this.flushWork(true);
     document.removeEventListener("pointerdown", this.onActivity, true);
     document.removeEventListener("keydown", this.onActivity, true);
@@ -125,7 +140,10 @@ class Editor {
     this.playBtn = h("button", { class: "icon-btn play", type: "button", "aria-label": t("play_pause"), "data-tip": t("tip_play"), onclick: () => this.toggle(), html: ICON.play });
     this.clock = h("span", { class: "clock" });
     const speed = h("select", { class: "speed", "aria-label": t("speed"), "data-tip": t("tip_speed"), onchange: (e) => (this.video.playbackRate = Number(e.target.value)) },
-      [0.75, 1, 1.25, 1.5].map((r) => h("option", { value: r, selected: r === 1 }, num(r, 2) + "×")));
+      SPEEDS.map((r) => h("option", { value: r, selected: r === 1 }, num(r, 2) + "×")));
+    this.speedSel = speed;
+    this.keysBtn = h("button", { class: "icon-btn keys-btn", type: "button", "aria-label": t("shortcuts"), "data-tip": t("tip_keys"),
+      onclick: () => this.toggleKeys(), html: ICON.keys });
     this.undoBtn = h("button", { class: "icon-btn undo", type: "button", disabled: true, onclick: () => this.undo(), "aria-label": t("undo"), "data-tip": t("tip_undo"), html: ICON.undo });
     this.redoBtn = h("button", { class: "icon-btn undo", type: "button", disabled: true, onclick: () => this.redo(), "aria-label": t("redo"), "data-tip": t("tip_redo"), html: ICON.redo });
     const transport = h("div", { class: "transport" },
@@ -135,7 +153,7 @@ class Editor {
       this.clock, speed,
       h("span", { class: "grow" }),
       h("button", { class: "btn small quiet", type: "button", "data-tip": t("tip_new_cue"), onclick: () => this.insertAtPlayhead() }, t("new_cue_here")),
-      this.undoBtn, this.redoBtn);
+      this.undoBtn, this.redoBtn, this.keysBtn);
 
     this.wave = h("canvas", { class: "wave", "aria-hidden": "true" });
     this.tlLayer = h("div", { class: "tl-layer" });
@@ -155,7 +173,7 @@ class Editor {
       [t("burn_video"), () => this.burn(), t("tip_burn")],
     ], "btn small");
     const moreMenu = this.menu("⋯", [
-      [t("shortcuts"), () => this.showKeys()],
+      [t("shortcuts"), () => this.toggleKeys()],
       [t("resegment"), () => this.resegment(), t("tip_resegment")],
     ], "btn small quiet", t("more"));
     // the rest of the queue keeps transcribing while you proofread: show how far it is
@@ -174,13 +192,18 @@ class Editor {
     this.reviewBar = h("div", { class: "reviewbar", hidden: true });
     this.panelBox = h("div", { class: "panelbox" });
     this.list = h("div", { class: "cuelist", role: "list" });
-    const left = h("div", { class: "ed-left" }, this.stage, transport, this.tl);
-    const right = h("div", { class: "ed-right" }, this.reviewBar, this.panelBox, this.list);
+    this.keysPanel = h("div", { class: "keys-panel", hidden: true });
+    const left = h("div", { class: "ed-left" }, this.stage, transport, this.tl, this.keysPanel);
+    this.progEl = h("div", { class: "progress-line" }, h("span", { class: "pl-text" }), h("span", { class: "pl-bar" }, h("i")));
+    const right = h("div", { class: "ed-right" }, this.reviewBar, this.panelBox, this.progEl, this.list);
     v.replaceChildren(head, h("div", { class: "ed-body" }, left, right));
     this.renderList();
     if (this.cues.length) this.select(0, { seek: false, scroll: false });
     this.applyStyle();
     this.sync(S.state);
+    let seen = null;
+    try { seen = localStorage.getItem("teksting.keys"); } catch (_) { /* storage blocked */ }
+    if (seen !== "closed") this.toggleKeys(true);  // open the first time, so the shortcuts get learned
   }
 
   menu(label, items, cls, aria) {
@@ -255,14 +278,45 @@ class Editor {
     if (this.rescued.some((r) => r.s < c.end && r.e > c.start)) out.push(["warn", t("f_rescued")]);
     return out;
   }
-  issueCount(i) { return this.flags(i).length + (this.unknown[i] || []).length + this.disagreeFor(i).length + (this.sugg.has(this.cues[i]) ? 1 : 0); }
+  // words the model was unsure of that are still in the subtitle text (edited-away words drop out by themselves)
+  unsureFor(i) {
+    const c = this.cues[i];
+    if (!this.unsure.length) return [];
+    const have = new Set((c.text.toLowerCase().match(/[\p{L}\p{N}]+/gu) || []));
+    const out = [];
+    for (const w of this.unsure) {
+      const mid = (w.s + w.e) / 2;
+      if (mid >= c.start - 0.05 && mid < c.end + 0.05 && have.has(w.n) && !out.some((o) => o.n === w.n)) out.push(w);
+    }
+    return out;
+  }
+  issueCount(i) { return this.flags(i).length + (this.unknown[i] || []).length + this.disagreeFor(i).length + (this.unsureFor(i).length ? 1 : 0) + (this.sugg.has(this.cues[i]) ? 1 : 0); }
   needsReview(i) { return !this.cues[i].checked && this.issueCount(i) > 0; }
   reviewLeft() { return this.cues.reduce((n, _, i) => n + (this.needsReview(i) ? 1 : 0), 0); }
 
   // ===================================================================== list
   renderList() {
     this.list.replaceChildren(...this.cues.map((c, i) => this.row(i)));
+    this.active = -1;
     this.updateCounts();
+  }
+  // split/merge/delete/insert: replace only the rows that changed instead of redrawing all (~95 ms at 700 cues)
+  spliceRows(i, del, ins) {
+    for (let k = 0; k < del; k++) if (this.list.children[i]) this.list.children[i].remove();
+    const frag = document.createDocumentFragment();
+    for (let k = 0; k < ins; k++) frag.append(this.row(i + k));
+    this.list.insertBefore(frag, this.list.children[i] || null);
+    if (del !== ins) for (let k = i + ins; k < this.list.children.length; k++) this.renumber(this.list.children[k], k);
+    for (const k of [i - 1, i + ins]) if (this.list.children[k] && this.cues[k]) this.fillRow(this.list.children[k], k);
+    const now = this.list.querySelector(".cue.now");
+    if (now) now.classList.remove("now");
+    this.active = -1;
+    this.updateCounts();
+  }
+  renumber(el, i) {
+    el.dataset.i = i;
+    $(".num", el).textContent = i + 1;
+    el._ta.setAttribute("aria-label", t("cue_text", { n: i + 1 }));
   }
 
   row(i) {
@@ -300,6 +354,9 @@ class Editor {
     const chips = [];
     for (const [lvl, label] of this.flags(i)) chips.push(h("span", { class: "chip " + lvl }, label));
     for (const w of this.unknown[i] || []) chips.push(h("button", { class: "chip warn word", type: "button", "data-tip": t("tip_word", { w }), onclick: () => this.addWord(w) }, w, h("span", { class: "plus" }, " +")));
+    const uns = this.unsureFor(i);
+    if (uns.length) chips.push(h("span", { class: "chip unsure", "data-tip": t("tip_unsure") }, t("unsure"),
+      ...uns.map((w) => h("button", { class: "chip-act", type: "button", onclick: () => this.hearWord(+el.dataset.i, w) }, w.w.replace(/[.,!?:;]+$/, "")))));
     for (const d of this.disagreeFor(i)) {
       const canUse = d.a && c.text.includes(d.a);
       chips.push(h("span", { class: "chip alt", "data-tip": t("tip_alt", { a: d.a || "–" }) },
@@ -336,6 +393,11 @@ class Editor {
 
   updateCounts() {
     const n = this.reviewLeft();
+    if (this.progEl) {
+      const ok = this.cues.reduce((a, c) => a + (c.checked ? 1 : 0), 0), all = this.cues.length;
+      $(".pl-text", this.progEl).textContent = t("progress", { ok, all }) + (n ? " · " + (n === 1 ? t("flags_left_1") : t("flags_left", { n })) : "");
+      $(".pl-bar i", this.progEl).style.width = (all ? (ok / all) * 100 : 0).toFixed(1) + "%";
+    }
     this.reviewBtn.textContent = n ? t("review_n", { n }) : t("review_none");
     this.reviewBtn.classList.toggle("primary", n > 0);
     if (this.review) this.renderReviewBar();
@@ -365,8 +427,8 @@ class Editor {
     $(".tools", el).replaceChildren(
       h("div", { class: "trow" },
         timeField("start"), h("span", { class: "muted" }, "–"), timeField("end"),
-        h("button", { class: "link small", type: "button", "data-tip": t("tip_start_here"), onclick: () => this.setTime(i, "start", this.video.currentTime) }, t("start_here")),
-        h("button", { class: "link small", type: "button", "data-tip": t("tip_end_here"), onclick: () => this.setTime(i, "end", this.video.currentTime) }, t("end_here"))),
+        h("button", { class: "link small", type: "button", "data-tip": t("tip_start_here"), onclick: () => this.setTimeHere(i, "start") }, t("start_here")),
+        h("button", { class: "link small", type: "button", "data-tip": t("tip_end_here"), onclick: () => this.setTimeHere(i, "end") }, t("end_here"))),
       h("div", { class: "trow" },
         h("button", { class: "btn tiny", type: "button", "data-tip": t("tip_wrap"), onclick: () => this.wrap(i) }, t("wrap")),
         h("button", { class: "btn tiny", type: "button", "data-tip": t("tip_split"), onclick: () => this.split(i) }, t("split")),
@@ -381,7 +443,7 @@ class Editor {
 
   select(i, { seek = true, focus = false, scroll = true } = {}) {
     if (i < 0 || i >= this.cues.length) return;
-    const prev = this.list.children[this.sel];
+    const prev = this.list.querySelector(".cue.sel");
     if (prev) { prev.classList.remove("sel"); $(".tools", prev).replaceChildren(); }
     this.sel = i;
     const el = this.list.children[i];
@@ -391,6 +453,8 @@ class Editor {
     if (scroll) el.scrollIntoView({ block: "nearest", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
     if (focus) el._ta.focus({ preventScroll: true });
     this.drawTimeline(true);
+    clearTimeout(this.resumeTimer);
+    this.resumeTimer = setTimeout(() => this.saveResume(), 1500);
   }
 
   // =============================================================== operations
@@ -462,6 +526,17 @@ class Editor {
     if (el) el._ta.value = text;
   }
 
+  // nearest word boundary (start: where a word starts; end: where a word ends + the usual linger)
+  snap(key, v, within) {
+    const a = key === "start" ? this.starts : this.ends;
+    if (!a || !a.length) return v;
+    let lo = 0, hi = a.length - 1;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (a[m] < v) lo = m + 1; else hi = m; }
+    let best = a[lo];
+    if (lo > 0 && Math.abs(a[lo - 1] - v) < Math.abs(best - v)) best = a[lo - 1];
+    return Math.abs(best - v) <= within ? best : v;
+  }
+  setTimeHere(i, key) { this.setTime(i, key, this.snap(key, this.video.currentTime, 0.25)); }
   setTime(i, key, v) {
     const c = this.cues[i];
     v = Math.max(0, Math.round(v * 1000) / 1000);
@@ -518,7 +593,7 @@ class Editor {
     this.cues.splice(i, 1, { start: c.start, end: Math.max(c.start + 0.2, mid - 0.04), text: ra.text, ...extra },
       { start: Math.min(c.end - 0.2, mid + 0.04), end: c.end, text: rb.text, ...extra });
     this.unknown.splice(i, 1, [], []);
-    this.renderList();
+    this.spliceRows(i, 1, 2);
     this.spellLater(i); this.spellLater(i + 1);
     this.select(i + 1, { focus: true, seek: false });
     this.changed();
@@ -531,7 +606,7 @@ class Editor {
     const r = await api("POST", "/api/wrap", { text: (a.text + " " + b.text).replace(/\s+/g, " ").trim() });
     this.cues.splice(i, 2, { start: a.start, end: b.end, text: r.text, ...(a.pos ? { pos: a.pos } : {}) });
     this.unknown.splice(i, 2, []);
-    this.renderList();
+    this.spliceRows(i, 2, 1);
     this.spellLater(i);
     this.select(i, { focus: true, seek: false });
     this.changed();
@@ -541,7 +616,7 @@ class Editor {
     this.snapshot();
     this.cues.splice(i, 1);
     this.unknown.splice(i, 1);
-    this.renderList();
+    this.spliceRows(i, 1, 0);
     if (this.cues.length) this.select(Math.min(i, this.cues.length - 1), { seek: false });
     this.changed();
     this.undoable(t("deleted"));
@@ -558,7 +633,7 @@ class Editor {
     this.sort();
     const i = this.cues.indexOf(cue);
     this.unknown.splice(i, 0, []);
-    this.renderList();
+    this.spliceRows(i, 0, 1);
     this.select(i, { focus: true, seek: false });
     this.changed();
     this.listen(i);
@@ -577,6 +652,16 @@ class Editor {
     }
     const k = this.cues.indexOf(c);
     if (k >= 0) this.refreshRow(k);
+  }
+  // play just this word (with a little context) and select it in the text
+  hearWord(i, w) {
+    this.select(i, { seek: false, focus: true });
+    const ta = this.list.children[i]._ta, core = w.w.replace(/[.,!?:;]+$/, "");
+    const at = ta.value.toLowerCase().indexOf(core.toLowerCase());
+    if (at >= 0) { ta.setSelectionRange(at, at + core.length); this.caret = at; }
+    this.playUntil = w.e + 0.35;
+    this.video.currentTime = Math.max(0, w.s - 0.35);
+    this.video.play().catch(() => {});
   }
   revertFix(i, f) {
     const c = this.cues[i];
@@ -650,6 +735,23 @@ class Editor {
     this.select(0, { seek: false });
     this.changed();
     this.undoable(t("reseg_done"));
+  }
+
+  resumeAt(r) {
+    if (!r || !this.cues.length || !(r.sel > 0)) return;
+    const i = Math.min(r.sel, this.cues.length - 1);
+    this.select(i, { seek: false, scroll: false });
+    this.list.children[i].scrollIntoView({ block: "center" });
+    this.seek(r.t || this.cues[i].start);
+    toast(t("resumed", { n: i + 1 }), { label: t("from_start"), run: () => { this.select(0, { seek: true }); } });
+  }
+  saveResume(keepalive = false) {
+    clearTimeout(this.resumeTimer);
+    if (this.sel < 0 || !this.video) return;
+    const sel = this.sel, tm = Math.round(this.video.currentTime * 10) / 10;
+    if (this.lastResume && this.lastResume.sel === sel && Math.abs(this.lastResume.t - tm) < 1) return;
+    this.lastResume = { sel, t: tm };
+    api("POST", `/api/projects/${this.id}/resume`, { sel, t: tm }, keepalive ? { keepalive: true } : {}).catch(() => {});
   }
 
   // ================================================================== review
@@ -923,7 +1025,8 @@ class Editor {
   showOverlay(force) {
     const i = this.activeAt(this.video.currentTime);
     if (i === this.active && !force) return;
-    if (this.list.children[this.active]) this.list.children[this.active].classList.remove("now");
+    const was = this.list.querySelector(".cue.now");
+    if (was) was.classList.remove("now");
     this.active = i;
     let text = "";
     if (i >= 0) {
@@ -996,6 +1099,14 @@ class Editor {
       ctx.fillRect(((sc.start - t0) / W) * w, 0, ((sc.end - sc.start) / W) * w, hgt);
       ctx.globalAlpha = 1;
     }
+    if (this.starts && this.starts.length && W <= 40) {  // where words start: the points timing snaps to
+      ctx.fillStyle = this.waveSel;
+      ctx.globalAlpha = 0.45;
+      let lo = 0, hi = this.starts.length;
+      while (lo < hi) { const m = (lo + hi) >> 1; if (this.starts[m] < t0) lo = m + 1; else hi = m; }
+      for (let k = lo; k < this.starts.length && this.starts[k] <= t0 + W; k++) ctx.fillRect(((this.starts[k] - t0) / W) * w, hgt - 4, 1, 4);
+      ctx.globalAlpha = 1;
+    }
     const p = this.peaks;
     if (!p || !p.length) return;
     const R = this.peakRate;
@@ -1026,6 +1137,7 @@ class Editor {
       const move = (ev) => {
         const c = this.cues[i];
         let v = Math.round(toTime(ev.clientX) * 100) / 100;
+        if (!ev.altKey) v = this.snap(key, v, (10 / rect.width) * this.win);  // within ~10 px; hold Alt for free movement
         const pv = this.cues[i - 1], nx = this.cues[i + 1];
         if (key === "start") v = Math.min(Math.max(v, pv ? pv.end + 0.04 : 0), c.end - 0.2);
         else v = Math.max(Math.min(v, nx ? nx.start - 0.04 : 1e9), c.start + 0.2);
@@ -1076,29 +1188,66 @@ class Editor {
     this.tl.addEventListener("pointermove", move);
     this.tl.addEventListener("pointerup", up, { once: true });
   }
+  // Wheel = glide the timeline; Ctrl+wheel = zoom. The view eases towards the target every frame and the video
+  // only seeks a few times a second (seeking per wheel notch made it jump and stutter), then lands exactly.
   tlWheel(e) {
     e.preventDefault();
-    if (e.ctrlKey) { // zoom in/out around the playhead
-      this.win = Math.min(120, Math.max(6, this.win * (e.deltaY > 0 ? 1.2 : 1 / 1.2)));
-      this.drawTimeline(true);
-      return;
+    const sc = this.glide || (this.glide = { center: this.drag ? this.drag.center : this.video.currentTime, win: this.win, lastSeek: 0 });
+    if (sc.target == null) { sc.target = sc.center; sc.winTarget = this.win; }
+    if (e.ctrlKey) {
+      sc.winTarget = Math.min(120, Math.max(6, sc.winTarget * (e.deltaY > 0 ? 1.2 : 1 / 1.2)));
+    } else {
+      const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      const px = e.deltaMode === 1 ? d * 30 : d;
+      const dur = this.video.duration || this.meta.duration || 1e9;
+      sc.target = Math.min(dur, Math.max(0, sc.target + (px / this.tl.clientWidth) * sc.winTarget));
     }
-    const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
-    const px = e.deltaMode === 1 ? d * 30 : d;
-    const dur = this.video.duration || 1e9;
-    this.seek(Math.min(dur, Math.max(0, this.video.currentTime + (px / this.tl.clientWidth) * this.win)));
+    sc.lastInput = performance.now();
+    if (!sc.raf) sc.raf = requestAnimationFrame(() => this.glideStep());
+  }
+  glideStep() {
+    const sc = this.glide;
+    if (!sc || !this.alive) return;
+    const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const k = still ? 1 : 0.22;  // share of the remaining distance per frame: smooth but responsive
+    sc.center += (sc.target - sc.center) * k;
+    this.win += (sc.winTarget - this.win) * k;
+    const moving = Math.abs(sc.target - sc.center) > 0.002 || Math.abs(sc.winTarget - this.win) > 0.01;
+    const now = performance.now();
+    this.drag = { center: sc.center };
+    if (moving && now - sc.lastSeek > 150) { sc.lastSeek = now; this.video.currentTime = sc.center; }
+    this.drawTimeline(true);
+    if (moving || now - sc.lastInput < 120) { sc.raf = requestAnimationFrame(() => this.glideStep()); return; }
+    this.win = sc.winTarget;
+    this.drag = null;
+    this.glide = null;
+    this.seek(sc.target);  // land exactly where the scrolling stopped
   }
 
   // ================================================================ keyboard
-  showKeys() {
-    const d = $("#dialog");
-    $("#dlg-title").textContent = t("shortcuts");
-    $("#dlg-body").innerHTML = t("keys_list_html");
-    $("#dlg-ok").textContent = t("close");
-    $("#dlg-ok").className = "btn primary";
-    $("#dlg-cancel").hidden = true;
-    d.addEventListener("close", () => ($("#dlg-cancel").hidden = false), { once: true });
-    d.showModal();
+  // small, non-blocking shortcut card under the timeline; opens by itself the first time
+  toggleKeys(force) {
+    const open = force ?? this.keysPanel.hidden;
+    this.keysPanel.hidden = !open;
+    this.keysBtn.classList.toggle("on", open);
+    try { localStorage.setItem("teksting.keys", open ? "open" : "closed"); } catch (_) { /* storage blocked */ }
+    if (!open || this.keysPanel.childElementCount) return;
+    const groups = t("keys_groups");
+    this.keysPanel.append(
+      h("div", { class: "kp-head" }, h("strong", null, t("shortcuts")),
+        h("button", { class: "link small", type: "button", onclick: () => this.toggleKeys(false) }, t("close"))),
+      h("div", { class: "kp-cols" }, ...groups.map(([title, rows]) => h("div", { class: "kp-group" },
+        h("div", { class: "kp-title" }, title),
+        ...rows.map(([keys, label]) => h("div", { class: "kp-row" },
+          h("span", { class: "kp-keys" }, ...keys.split(" ").map((k) => (k === "/" ? " / " : h("kbd", null, k)))),
+          h("span", null, label)))))));
+  }
+  setSpeed(dir) {
+    const cur = SPEEDS.indexOf(this.video.playbackRate);
+    const k = Math.min(SPEEDS.length - 1, Math.max(0, (cur < 0 ? 1 : cur) + dir));
+    this.video.playbackRate = SPEEDS[k];
+    this.speedSel.value = String(SPEEDS[k]);
+    toast(t("speed_now", { r: num(SPEEDS[k], 2) }), null, 1200);
   }
   onKey(e) {
     const tag = e.target.tagName;
@@ -1120,15 +1269,34 @@ class Editor {
       if (this.sel >= 0) { this.cues[this.sel].checked = false; this.approve(this.sel); }
       return;
     }
-    if (e.altKey && e.key === "ArrowDown") { e.preventDefault(); this.select(Math.min(this.sel + 1, this.cues.length - 1), { focus: true }); return; }
-    if (e.altKey && e.key === "ArrowUp") { e.preventDefault(); this.select(Math.max(this.sel - 1, 0), { focus: true }); return; }
-    if (e.altKey && e.key === "ArrowLeft") { e.preventDefault(); this.seek(this.video.currentTime - 5); return; }
-    if (e.altKey && e.key === "ArrowRight") { e.preventDefault(); this.seek(this.video.currentTime + 5); return; }
-    if (e.altKey && e.code === "KeyR") { e.preventDefault(); if (this.sel >= 0) this.playCue(this.sel); return; }
-    if (e.altKey && e.code === "KeyI") { e.preventDefault(); if (this.sel >= 0) this.setTime(this.sel, "start", this.video.currentTime); return; }
-    if (e.altKey && e.code === "KeyO") { e.preventDefault(); if (this.sel >= 0) this.setTime(this.sel, "end", this.video.currentTime); return; }
-    if (e.altKey && e.code === "KeyK") { e.preventDefault(); if (this.sel >= 0) this.approve(this.sel); return; }
-    if (e.altKey && e.code === "KeyG") { e.preventDefault(); this.review ? this.stopReview() : this.startReview(); return; }
+    // Alt shortcuts work everywhere, also while typing. Not with Ctrl: Ctrl+Alt is AltGr (@, £, €, { ...).
+    const alt = e.altKey && !ctrl;
+    const has = this.sel >= 0;
+    if (alt && tag === "TEXTAREA") this.caret = e.target.selectionStart;
+    const altKeys = {
+      ArrowDown: () => this.select(Math.min(this.sel + 1, this.cues.length - 1), { focus: true }),
+      ArrowUp: () => this.select(Math.max(this.sel - 1, 0), { focus: true }),
+      ArrowLeft: () => this.seek(this.video.currentTime - 5),
+      ArrowRight: () => this.seek(this.video.currentTime + 5),
+      KeyR: () => has && this.playCue(this.sel),
+      KeyI: () => has && this.setTimeHere(this.sel, "start"),
+      KeyO: () => has && this.setTimeHere(this.sel, "end"),
+      KeyK: () => has && this.approve(this.sel),
+      KeyG: () => (this.review ? this.stopReview() : this.startReview()),
+      KeyS: () => has && this.split(this.sel),
+      KeyM: () => has && this.merge(this.sel),
+      KeyW: () => has && this.wrap(this.sel),
+      KeyH: () => has && this.listen(this.sel),
+      KeyN: () => this.insertAtPlayhead(),
+      Backspace: () => has && this.remove(this.sel),
+      Delete: () => has && this.remove(this.sel),
+      NumpadSubtract: () => this.setSpeed(-1),
+      NumpadAdd: () => this.setSpeed(1),
+    };
+    if (alt) {
+      const fn = altKeys[e.key.startsWith("Arrow") ? e.key : e.code] || (e.key === "-" ? () => this.setSpeed(-1) : e.key === "+" ? () => this.setSpeed(1) : null);
+      if (fn) { e.preventDefault(); fn(); return; }
+    }
     if (typing || e.altKey || ctrl) return;
     // plain keys, only outside text fields
     if (e.code === "Space") { e.preventDefault(); this.toggle(); return; }
@@ -1137,7 +1305,7 @@ class Editor {
     if (e.key === "ArrowUp") { e.preventDefault(); this.select(Math.max(this.sel - 1, 0), { focus: false }); return; }
     if (e.key === "ArrowDown") { e.preventDefault(); this.select(Math.min(this.sel + 1, this.cues.length - 1), { focus: false }); return; }
     if (e.key === "Enter" && this.sel >= 0) { e.preventDefault(); this.list.children[this.sel]._ta.focus(); return; }
-    if (e.key === "?") { e.preventDefault(); this.showKeys(); }
+    if (e.key === "?") { e.preventDefault(); this.toggleKeys(); }
   }
 
   // ================================================================== export

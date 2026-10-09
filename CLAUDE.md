@@ -158,9 +158,27 @@ video, download SRT, burn-in video), undo/redo (also for split/merge/delete; toa
 "Hør på nytt" (re-transcribe one cue), glossary popup when a word is corrected to a similar spelling,
 work timer (counts only active time), pause-on-type, waveform timeline (drag to scroll, wheel scrolls,
 Ctrl+wheel zooms, drag cue edges to retime).
-Keys outside text fields: Space play/pause, ←/→ ±5 s, ↑/↓ previous/next cue, Enter edit, Esc leave field.
-In text fields: Ctrl+Space, Alt+arrows. Alt+G review, Alt+R replay, Alt+I/O start/end here, Alt+K approve,
-Ctrl+F find, Ctrl+Z/Y undo/redo. Hover tooltips only on non-obvious buttons (Jonas's explicit wish).
+Keys outside text fields: Space play/pause, ←/→ ±5 s, ↑/↓ previous/next cue, Enter edit, Esc leave field, ? card.
+Everywhere (Alt, never with Ctrl — Ctrl+Alt is AltGr on Norwegian keyboards): Alt+arrows, Alt+G review, Alt+R
+replay, Alt+I/O start/end here (snaps to a word within 0.25 s), Alt+K approve, Alt+S split, Alt+M merge, Alt+W wrap,
+Alt+Backspace delete, Alt+H listen again, Alt+N new cue, Alt+−/Alt++ speed. Ctrl+F find, Ctrl+Z/Y undo/redo.
+The list lives in i18n `keys_groups` (nb + en) and is shown as a small card under the timeline (keyboard button or
+?), open the first time; tooltips name the key too. Hover tooltips only on non-obvious buttons (Jonas's wish).
+
+Added 2026-10-09 (all click-tested in fake mode, see git log):
+- **Uncertain words**: model words with confidence < `UNSURE_P` (0.5) still present in the cue text → chip
+  "Usikker: <words>"; clicking a word plays just that word and selects it. Counts as a review flag. Words come
+  from `/api/projects/{pid}` (`words`: [start, end, p, text]). Threshold to be validated against real SRTs.
+- **Snapping**: dragging a cue edge on the timeline snaps to word starts / word ends + 0.3 s (within ~10 px; hold
+  Alt for free movement); small ticks at the bottom of the timeline mark word starts (zoom ≤ 40 s).
+- **Fast structure edits**: split/merge/delete/insert use `spliceRows` (only changed rows + renumbering), ~70 ms
+  incl. server wrap calls on 684 cues, instead of a full `renderList()`.
+- **Progress + resume**: "312 av 683 godkjent · 28 merknader igjen" above the list; `POST /api/projects/{pid}/resume`
+  stores {sel, t} in meta; the editor reopens there with a "Fra starten" toast.
+- **Smooth timeline wheel**: `tlWheel` + `glideStep` ease the view (Ctrl+wheel zoom too), seek ≤ every 150 ms, land
+  exactly at the end. Long words wrap inside chips (`overflow-wrap: anywhere`).
+- Testing tip: the app window throttles timers and gets no keyboard input from CDP while it is in the background;
+  run click/keyboard tests in a normal browser tab on the same port instead.
 
 ## Decisions already made (don't relitigate without reason)
 - NB-Whisper large is the default model (best Norwegian accuracy); medium/small optional.

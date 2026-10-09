@@ -576,3 +576,29 @@ body { font-size: 15px; }
 .ed-queue:hover { color: var(--brand); }
 @keyframes eq-pulse { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .ed-queue::before { animation: none; } }
+
+/* editor: uncertain words */
+.chip.unsure { background: var(--info-soft); color: var(--info); }
+.chip.unsure .chip-act { font-weight: 600; }
+
+/* editor: approved progress above the list */
+.progress-line { display: flex; align-items: center; gap: 10px; padding: 2px 2px 6px; font-size: 12.5px; color: var(--muted); }
+.progress-line .pl-text { flex: none; }
+.progress-line .pl-bar { flex: 1; height: 3px; border-radius: 2px; background: var(--line-soft); overflow: hidden; min-width: 40px; }
+.progress-line .pl-bar i { display: block; height: 100%; width: 0; background: var(--ok); transition: width .3s ease; }
+
+/* editor: shortcut card under the timeline */
+.keys-btn.on { color: var(--brand); }
+.keys-panel { margin-top: 10px; padding: 10px 14px 12px; border: 1px solid var(--line-soft); border-radius: 10px;
+  background: var(--panel); font-size: 12.5px; color: var(--ink); }
+.keys-panel[hidden] { display: none; }
+.kp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.kp-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 2px 26px; }
+.kp-title { font-weight: 600; color: var(--muted); margin: 6px 0 3px; font-size: 11.5px; letter-spacing: .04em; text-transform: uppercase; }
+.kp-row { display: flex; gap: 10px; align-items: baseline; padding: 1.5px 0; }
+.kp-keys { flex: none; width: 112px; color: var(--muted); white-space: nowrap; }
+.keys-panel kbd { font: 600 11px var(--font); padding: 1px 5px; border: 1px solid var(--line); border-bottom-width: 2px;
+  border-radius: 4px; background: var(--paper); color: var(--ink); white-space: nowrap; }
+
+/* a very long "word" (pasted URL, held key) must wrap inside its chip, not stretch the subtitle box */
+.chip { max-width: 100%; overflow-wrap: anywhere; word-break: break-word; }

@@ -20,6 +20,7 @@ function h(tag, attrs, ...kids) {
   return el;
 }
 const ICON = {
+  keys: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="3" y="6.5" width="18" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M7 10h.01M10.5 10h.01M14 10h.01M17 10h.01M8 14h8" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>',
   play: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></svg>',
   pause: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" fill="currentColor"/></svg>',
   back: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M11 6 5 12l6 6M5.5 12H19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
