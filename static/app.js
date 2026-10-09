@@ -414,7 +414,9 @@ function updateJobs() {
   if (nDone && !bb.childElementCount) {
     bb.append(h("span", { class: "muted" }, t("batch_label")),
       h("button", { class: "btn small", type: "button", "data-tip": t("tip_batch_srt"), onclick: async () => {
-        const r = await api("POST", "/api/export-all", { kind: "srt" }); S.state = r; toast(t("batch_srt_done", { n: r.count })); } }, t("batch_srt")),
+        const r = await api("POST", "/api/export-all", { kind: "srt" }); S.state = r;
+        toast(t(r.count === 1 ? "batch_srt_done_1" : "batch_srt_done", { n: r.count }));
+        if (r.failed && r.failed.length) toast(t("batch_srt_failed", { names: r.failed.map((f) => f.name).join(", ") }), null, 12000); } }, t("batch_srt")),
       h("button", { class: "btn small", type: "button", "data-tip": t("tip_batch_burn"), onclick: async () => {
         const r = await api("POST", "/api/export-all", { kind: "burn" }); S.state = r; toast(t("batch_burn_done", { n: r.count })); updateJobs(); } }, t("batch_burn")));
   }

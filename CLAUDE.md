@@ -127,6 +127,17 @@ Typing a key 77 → 23 ms, next cue 72 → 17 ms, open 602 → 252 ms. Causes: `
 ResizeObserver); off-screen cues laid out anyway (now `content-visibility: auto` on `.cue`). Still slow-ish:
 `renderList()` rebuilds all cues (~95 ms) on split/merge/delete/replace-all. Re-measure after editor changes.
 
+### SRT export (tested 2026-10-09)
+Both exports (download + "Lagre SRT ved videoen" + export-all) go through `srt_bytes()`: identical bytes, UTF-8 without
+BOM, CRLF. Saving writes `.srt.tmp` first, then keeps the old file as `.srt.bak` and replaces; export-all continues past
+failures and returns `failed`. Verified: strict format check, the `srt` and `pysubs2` packages and ffmpeg (SRT → WebVTT)
+all read a 683-cue export identically; timestamps carry correctly (59.9996 s → 00:01:00,000; > 1 h); empty cues skipped
+with continuous numbering; Norwegian letters/typography, `<`, `&`, `-->` and stray blank lines are safe.
+Open: "Flytt opp" (`pos: top`) is NOT in the SRT (no position in the format). `{n8}` would carry it in VLC/YouTube/
+ffmpeg, but some players show it as literal text — ask Jonas which player/site the SRTs go to before adding it.
+Test hygiene: fake-mode export-all writes next to EVERY finished test video — only ever add copies under the scratch
+folder as test videos (on 2026-10-09 test .srt files landed next to Jonas's real files and had to be removed).
+
 ### Static files must never come from a stale cache (fixed 2026-10-09)
 The app window keeps its HTTP cache between runs (pywebview `private_mode=False`); it reused old app.js /
 editor.js after an update without even asking the server. Now `index()` adds `?v=<newest static mtime>` to

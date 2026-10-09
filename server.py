@@ -605,11 +605,17 @@ def wrap(text: str = Body(..., embed=True)):
     return {"text": segment.wrap_text(text, segment.params(store.settings()["rules"]))}
 
 
+def srt_bytes(pid):
+    """The SRT file exactly as both exports write it: UTF-8 without BOM, Windows line endings (CRLF).
+    (Before, the download had LF and the saved file CRLF, because write_text translated on Windows.)"""
+    return segment.to_srt(store.cues(pid)).replace("\n", "\r\n").encode("utf-8")
+
+
 @app.get("/api/projects/{pid}/srt")
 def srt(pid: str):
     m = project(pid)
     name = Path(m["name"]).stem + ".srt"
-    return Response(segment.to_srt(store.cues(pid)), media_type="application/x-subrip",
+    return Response(srt_bytes(pid), media_type="application/x-subrip",
                     headers={"Content-Disposition": f"attachment; filename*=UTF-8''{urllib.parse.quote(name)}"})
 
 
@@ -663,26 +669,44 @@ def burn_cancel(pid: str):
 @app.post("/api/export-all")
 def export_all(kind: str = Body(..., embed=True)):
     done = [m for m in store.all() if m["status"] == "done" and Path(m["path"]).exists()]
-    saved = []
+    saved, failed = [], []
     for m in done:
         if kind == "srt":
-            saved.append(save_srt(m["id"])["path"])
+            try:  # one locked file or folder must not stop the rest
+                saved.append(write_srt_next_to_video(m["id"], m)["path"])
+            except OSError as e:
+                failed.append({"name": m["name"], "message": e.strerror or str(e)})
         elif kind == "burn" and (m.get("export") or {}).get("status") not in ("queued", "running"):
             store.update(m["id"], export={"status": "queued", "progress": 0.0})
             saved.append(m["path"])
     exporter.wake.set()
-    return {"count": len(saved), "paths": saved, **state()}
+    return {"count": len(saved), "paths": saved, "failed": failed, **state()}
 
 
 @app.post("/api/projects/{pid}/save-srt")
 def save_srt(pid: str):
     m = project(pid)
+    try:
+        return write_srt_next_to_video(pid, m)
+    except OSError as e:
+        raise HTTPException(500, f"{m['name']}: {e.strerror or e}")
+
+
+def write_srt_next_to_video(pid, m):
+    """Write the new file first; only then keep the old one as .srt.bak and put the new one in place,
+    so a failed write can never leave the video without its .srt."""
     target = Path(m["path"]).with_suffix(".srt")
+    tmp = target.with_suffix(".srt.tmp")
+    tmp.write_bytes(srt_bytes(pid))
     backup = None
-    if target.exists():
-        backup = target.with_suffix(".srt.bak")
-        target.replace(backup)
-    target.write_text(segment.to_srt(store.cues(pid)), encoding="utf-8")
+    try:
+        if target.exists():
+            backup = target.with_suffix(".srt.bak")
+            target.replace(backup)
+        tmp.replace(target)
+    except OSError:
+        tmp.unlink(missing_ok=True)
+        raise
     return {"path": str(target), "backup": str(backup) if backup else None}
 
 
