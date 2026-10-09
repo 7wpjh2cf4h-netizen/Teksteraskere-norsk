@@ -32,29 +32,38 @@ TIPS
 KORREKTURLESING (raskest slik)
 - Trykk «Gå gjennom». Appen hopper bare til undertekstene som trenger et blikk, spiller dem av,
   og du retter og trykker Enter for å godkjenne. Resten trenger du ikke se på.
-- Gult/oransje merke: stavefeil, for rask lesehastighet, for lang linje eller stedet der den raske
-  og den beste modellen hørte forskjellig («Rask modell hørte …» – trykk «Bruk» hvis den har rett).
+- Fargene på merkene under teksten: rødt = bryter en regel (for lang linje, tom, overlapper),
+  oransje = lytt og sjekk (usikre ord, stavefeil, «Alternativ: …» der den raske modellen hørte noe annet –
+  trykk «Bruk» hvis den har rett, «Hentet inn igjen – sjekk lyden»), blått = til informasjon (tidsråd,
+  automatiske rettelser).
+- «Hør på nytt» (Alt+R) spiller underteksten én gang til. Markøren blir stående, så du kan rette med en gang.
+  Spiller du samme undertekst to ganger, foreslår appen å spille den saktere.
+- Ctrl+klikk et ord i teksten for å høre bare det ordet. Ordet som sies akkurat nå, er gult mens videoen går.
+- Godkjente undertekster krymper til én grå linje, så listen viser det som gjenstår.
 - Feil trykk? «Angre» (Ctrl+Z) angrer også deling, sammenslåing og sletting. «Gjør om» = Ctrl+Y.
 - Søk og erstatt (Ctrl+F) retter et navn overalt på en gang.
-- Mangler en setning? Appen lytter automatisk på nytt der det er lyd men ingen tekst, og merker
-  det den henter inn («hoppet over dette først»). Mangler det fortsatt noe: sett avspillingen der,
-  trykk «Ny undertekst her», så foreslår modellen teksten. «Hør på nytt» virker på alle undertekster.
-- Hurtigtaster (utenfor tekstfelt): Mellomrom = spill/pause, piltast venstre/høyre = 5 sek, opp/ned = forrige/neste,
-  Enter = skriv i underteksten, Esc = gå ut av tekstfeltet. Trykk ? for hele listen. Hold musen over en knapp for forklaring.
+- Mangler en setning? Appen lytter automatisk på nytt der det er lyd men ingen tekst, og merker det den
+  henter inn. Mangler det fortsatt noe: sett avspillingen der og trykk «Ny undertekst her» (Alt+N).
+- Hurtigtaster: tastatur-knappen under videoen viser hele listen. De viktigste: Ctrl+Mellomrom = spill/pause,
+  Alt+pil opp/ned = forrige/neste, Alt+R = hør på nytt, Alt+G = gå gjennom merknadene, Enter = godkjenn og neste
+  (under gjennomgang), Esc = ut av tekstfeltet. Hold musen over en knapp for forklaring.
 
 APPEN BLIR BEDRE JO MER DU BRUKER DEN
 - Teksting lærer av rettelsene dine. Retter du samme feil i 2 videoer (f.eks. «Telenord» til «Telenor»),
-  rettes den automatisk i nye videoer og merkes grønt («Rettet automatisk»). Se og styr listen under
+  rettes den automatisk i nye videoer og merkes blått («Rettet: …»). Se og styr listen under
   Innstillinger > Lærte rettelser. Angrer du en automatisk rettelse, slutter appen å bruke den.
 - Ordlisten og de lærte rettelsene gis til modellen som stikkord, så den hører navn riktigere.
 - Arbeidstiden måles mens du er aktiv i korrekturvisningen. På Videoer-siden ser du minutter arbeid
   per videominutt og hvor mye av teksten du måtte endre. Målet er under 6 minutter per videominutt.
 
 EKSPORT
-- SRT-fil: til nettsider/spillere der seerne kan slå teksting av og på. Spilleren bestemmer utseendet.
-- Video med innbrent tekst: teksten blir en del av bildet. Utseendet velger du under «Stil»
-  (skrift, størrelse, farge, boks, plassering). Lagres som «navn_tekstet.mp4» ved siden av originalen.
-- På Videoer-siden kan du eksportere alle ferdige videoer på en gang.
+- «Lagre SRT» lagrer SRT-filen ved siden av videoen, med samme navn. En eldre fil blir tatt vare på som
+  «.srt.bak». Vil du laste den ned et annet sted: «⋯» > «Last ned SRT».
+- På Videoer-siden kan du lagre SRT for alle ferdige videoer på en gang.
+- SRT-filen har ingen utseende eller plassering: spilleren på nettsiden bestemmer det.
+- Video med innbrent tekst (teksten blir en del av bildet) er skjult som standard. Slå den på under
+  Innstillinger > Arbeidsflyt > «Vis verktøy for innbrent tekst». Da kommer «Stil», «Flytt opp» og
+  «Eksporter» > «Lag video med innbrent tekst» tilbake. Lagres som «navn_tekstet.mp4» ved siden av originalen.
 
 HVIS NOE GÅR GALT
 - Starter ikke appen fra snarveien? Dobbeltklikk start.bat, så ser du feilmeldingen.
