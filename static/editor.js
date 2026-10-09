@@ -59,7 +59,6 @@ class Editor {
     document.addEventListener("pointerdown", this.onActivity, true);
     document.addEventListener("keydown", this.onActivity, true);
     this.workTimer = setInterval(() => this.tickWork(), 1000);
-    this.sugg = new Map();   // cue object -> suggested text from "listen again"
     this.peakRate = d.peak_rate || 50;
     this.cues = d.cues.map((c) => ({ ...c }));
     this.sort();
@@ -291,7 +290,7 @@ class Editor {
     }
     return out;
   }
-  issueCount(i) { return this.flags(i).length + (this.unknown[i] || []).length + this.disagreeFor(i).length + (this.unsureFor(i).length ? 1 : 0) + (this.sugg.has(this.cues[i]) ? 1 : 0); }
+  issueCount(i) { return this.flags(i).length + (this.unknown[i] || []).length + this.disagreeFor(i).length + (this.unsureFor(i).length ? 1 : 0); }
   needsReview(i) { return !this.cues[i].checked && this.issueCount(i) > 0; }
   reviewLeft() { return this.cues.reduce((n, _, i) => n + (this.needsReview(i) ? 1 : 0), 0); }
 
@@ -368,13 +367,6 @@ class Editor {
       chips.push(h("span", { class: "chip auto", "data-tip": t("autofix_title") }, t("autofix", { a: f.a, b: f.b }),
         h("button", { class: "chip-act", type: "button", onclick: () => this.revertFix(+el.dataset.i, f) }, t("undo"))));
     }
-    const sg = this.sugg.get(c);
-    if (sg != null) {
-      chips.unshift(h("span", { class: "chip sugg" + (sg === "…" ? " busy" : "") },
-        sg === "…" ? t("listening") : (sg ? t("suggestion", { s: sg.replace(/\n/g, " ") }) : t("heard_nothing")),
-        sg && sg !== "…" ? h("button", { class: "chip-act", type: "button", onclick: () => this.useSuggestion(+el.dataset.i) }, t("alt_use")) : null,
-        sg !== "…" ? h("button", { class: "chip-act", type: "button", onclick: () => { this.sugg.delete(c); this.refreshRow(+el.dataset.i); } }, t("dismiss")) : null));
-    }
     $(".issues", el).replaceChildren(...chips);
     el.classList.toggle("flagged", chips.length > 0);
     el.classList.toggle("checked", !!c.checked);
@@ -437,7 +429,6 @@ class Editor {
         h("button", { class: "btn tiny", type: "button", "data-tip": t("tip_pos"), onclick: () => this.togglePos(i) }, c.pos === "top" ? t("pos_bottom") : t("pos_top")),
         // mousedown is cancelled so the cursor stays in the text while you listen and then type the fix
         h("button", { class: "btn tiny", type: "button", "data-tip": t("tip_hear_again"), onmousedown: (e) => e.preventDefault(), onclick: () => this.playCue(i) }, t("hear_again")),
-        h("button", { class: "btn tiny", type: "button", "data-tip": t("listen_title"), onclick: () => this.listen(i) }, t("listen")),
         h("button", { class: "btn tiny quiet danger-text", type: "button", onclick: () => this.remove(i) }, t("delete")),
         h("span", { class: "grow" }),
         h("button", { class: "icon-btn tiny undo-inline", type: "button", "aria-label": t("undo"), "data-tip": t("tip_undo"), disabled: !this.hist.length, onclick: () => this.undo(), html: ICON.undo }),
@@ -639,22 +630,6 @@ class Editor {
     this.spliceRows(i, 0, 1);
     this.select(i, { focus: true, seek: false });
     this.changed();
-    this.listen(i);
-  }
-  async listen(i) {
-    const c = this.cues[i];
-    if (!c) return;
-    this.sugg.set(c, "…");
-    this.refreshRow(i);
-    try {
-      const r = await api("POST", `/api/projects/${this.id}/listen`, { start: c.start, end: c.end });
-      this.sugg.set(c, r.text || "");
-    } catch (e) {
-      this.sugg.delete(c);
-      toast(t("listen_failed") + " " + e.message);
-    }
-    const k = this.cues.indexOf(c);
-    if (k >= 0) this.refreshRow(k);
   }
   // play just this word (with a little context) and select it in the text
   hearWord(i, w) {
@@ -675,19 +650,6 @@ class Editor {
     this.refreshRow(i);
     this.spellLater(i);
     this.changed();
-  }
-  useSuggestion(i) {
-    const c = this.cues[i];
-    const s = this.sugg.get(c);
-    if (!s) return;
-    this.snapshot();
-    this.setText(i, s);
-    this.sugg.delete(c);
-    c.checked = false;
-    this.refreshRow(i);
-    this.spellLater(i);
-    this.changed();
-    this.undoable(t("suggestion_used"));
   }
   useAlt(i, d) {
     this.snapshot();
@@ -1324,7 +1286,6 @@ class Editor {
       KeyS: () => has && this.split(this.sel),
       KeyM: () => has && this.merge(this.sel),
       KeyW: () => has && this.wrap(this.sel),
-      KeyH: () => has && this.listen(this.sel),
       KeyN: () => this.insertAtPlayhead(),
       Backspace: () => has && this.remove(this.sel),
       Delete: () => has && this.remove(this.sel),

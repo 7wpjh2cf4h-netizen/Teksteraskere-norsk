@@ -52,7 +52,7 @@ FastAPI + uvicorn backend, vanilla-JS single-page app (no build step), files on 
 | File | What it does |
 |---|---|
 | `server.py` | API, background `Worker` (transcription queue, one job at a time), `Exporter` (burn-in queue), `Tracker` (phase-weighted progress + ETA), app mode (own window via pywebview/WebView2, see below; Chrome/Edge `--app` only as fallback), Windows keep-awake while busy, tkinter file picker in a subprocess (DPI-aware) |
-| `tekst/engine.py` | Model download (HF `NbAiLab/nb-whisper-{small,medium,large}`, ready-made `ct2/` folders + tokenizer/preprocessor files), faster-whisper transcription, **gap rescue**, `listen` (re-transcribe one cue), waveform peaks, fake mode |
+| `tekst/engine.py` | Model download (HF `NbAiLab/nb-whisper-{small,medium,large}`, ready-made `ct2/` folders + tokenizer/preprocessor files), faster-whisper transcription, **gap rescue**, waveform peaks, fake mode |
 | `tekst/segment.py` | Words → cues: filler removal, DP segmentation with break costs, line splitting, timing rules, SRT writer |
 | `tekst/compare.py` | Disagreements between the main model and the fast model (double-check) |
 | `tekst/learn.py` | Learns word corrections (original vs edited cues); auto-applies a rule after it's seen in ≥2 videos; user can set on/off/delete |
@@ -113,10 +113,9 @@ to time-weighted ranges, measures real speed during decode, sends `rate`/`cap`/`
 - RAM (measured 2026-10-09): large 1.53 GB (loads in ~5 s warm), small 0.26 GB (~1 s), speller 0.53 GB
   (~12 s, pure-Python spylls; kept — dropping it would cost 12 s per editor open), rest ~0.1 GB. Window
   (WebView2) ~0.7 GB. Idle with both models loaded the app was ~3.2 GB.
-- Freeing idle models (`Worker.free_idle_models`): empty queue → small freed at once; the main/editor model
-  is kept while a visible editor polls (`/api/state?editing=<pid>`; also used by "Foreslå tekst") and freed `TEKSTING_IDLE_FREE` (600 s)
-  after the last editor/job use. Opening an editor preloads it in the background (`Engine.preload`; other
-  threads pause ≤ 0.2 s during the load), so it is ready before the first "Foreslå tekst".
+- Freeing idle models (`Worker.free_idle_models`): both models are freed `TEKSTING_IDLE_FREE` (60 s) after
+  the last job once the queue is empty. Only transcription uses a model: the editor has no model features
+  (Jonas 2026-10-09: "human ear always beats model" when proofreading), so proofreading runs at ~1.3 GB.
 - Polling: 1 s while anything runs/queues/exports/downloads, 3 s idle, 10 s while the window is hidden
   (must stay < 90 s: the browser-mode watchdog quits after 90 s without a poll). `/api/downloads` only on the
   settings page or during a download. Editor `loop()` sleeps after ~30 still frames while paused; video
@@ -177,7 +176,7 @@ Review mode ("Gå gjennom": jumps only to flagged cues, Enter approves), find/re
 (font, size, colour, box, position — preview overlay matches the burned result), export menu (SRT next to the
 video, download SRT, burn-in video), undo/redo (also for split/merge/delete; toast with "Angre"), flags
 (spelling, reading speed, line length, model disagreement with "Bruk", rescued speech, autofix with "Angre"),
-"Foreslå tekst" (re-transcribe one cue; was called "Hør på nytt" until 2026-10-09, when Jonas asked that "Hør på nytt" instead replays the cue so the proofreader can rehear difficult words: `playCue`, mousedown cancelled so the caret stays in the text), glossary popup when a word is corrected to a similar spelling,
+"Hør på nytt" replays the cue (`playCue`, mousedown cancelled so the caret stays in the text). Removed 2026-10-09 on Jonas's request: the model suggestion for one cue ("listen"/"Foreslå tekst", Alt+H, also used by "Ny undertekst her") — the human ear beats the model in the editor, and it let the editor run without the 1.5 GB model, glossary popup when a word is corrected to a similar spelling,
 work timer (counts only active time), pause-on-type, waveform timeline (drag to scroll, wheel scrolls,
 Ctrl+wheel zooms, drag cue edges to retime).
 Keys outside text fields: Space play/pause, ←/→ ±5 s, ↑/↓ previous/next cue, Enter edit, Esc leave field, ? card.

@@ -198,24 +198,10 @@ class Engine:
     def is_loaded(self, name):
         return name in self._loaded
 
-    def preload(self, name):
-        """Load a model in the background (other threads pause at most ~0.2 s while large loads)."""
-        if name in self._loaded or not self.is_ready(name) or getattr(self, "_preloading", None) == name:
-            return
-        self._preloading = name
-
-        def go():
-            try:
-                self._model(name)
-            except Exception as e:
-                print("preload failed:", e)
-            finally:
-                self._preloading = None
-        threading.Thread(target=go, daemon=True).start()
 
     def unload(self, keep=()):
-        """Free every loaded model not in `keep` (large holds ~1.5 GB of RAM, small ~0.26 GB). A transcription or
-        listen already using one keeps its own reference, so this never pulls a model out from under it."""
+        """Free every loaded model not in `keep` (large holds ~1.5 GB of RAM, small ~0.26 GB). A transcription
+        already using one keeps its own reference, so this never pulls a model out from under it."""
         with self.lock:
             gone = [n for n in self._loaded if n not in keep]
             for n in gone:
@@ -360,14 +346,6 @@ class Engine:
                 out.append(d)
         return out
 
-    def listen(self, name, path, start, end, language, prompt):
-        """Transcribe just [start, end] of the file (no voice filter). Returns text."""
-        if FAKE:
-            return "Dette er et forslag fra modellen."
-        model = self._model(name)
-        clip = decode_clip(path, max(0.0, start - 0.15), end + 0.15)
-        words = self.listen_array(model, clip, 0.0, language, prompt)
-        return " ".join(w["w"].strip() for w in words).strip()
 
 
 SR = 16000
@@ -380,34 +358,6 @@ HALLU = re.compile(r"(teksting|tekstet|undertekst\w*|oversatt)\s+(av|:)|takk for
 
 def _w(w):
     return {"w": w.word, "s": round(w.start, 3), "e": round(w.end, 3), "p": round(w.probability, 3)}
-
-
-def decode_clip(path, start, end):
-    """Decode only a part of a media file to 16 kHz mono float32 (fast, seeks first)."""
-    import av
-    import numpy as np
-    out = []
-    with av.open(str(path)) as c:
-        s = next(s for s in c.streams if s.type == "audio")
-        c.seek(int(max(0.0, start - 1.0) * 1_000_000), any_frame=False, backward=True)
-        res = av.AudioResampler(format="flt", layout="mono", rate=SR)
-        t_cur = None
-        for frame in c.decode(s):
-            ft = float(frame.time) if frame.time is not None else t_cur
-            if ft is not None and ft > end:
-                break
-            for f in res.resample(frame):
-                arr = f.to_ndarray().reshape(-1)
-                t0 = ft if ft is not None else 0.0
-                out.append((t0, arr))
-            t_cur = (ft or 0.0) + frame.samples / frame.sample_rate
-    if not out:
-        return np.zeros(0, dtype=np.float32)
-    t0 = out[0][0]
-    audio = np.concatenate([a for _, a in out]).astype(np.float32)
-    i0 = max(0, int((start - t0) * SR))
-    i1 = max(i0, int((end - t0) * SR))
-    return audio[i0:i1]
 
 
 FAKE_TEXT = (

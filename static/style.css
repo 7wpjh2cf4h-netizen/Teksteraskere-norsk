@@ -420,8 +420,6 @@ kbd {
 .clock { min-width: 0; white-space: nowrap; }
 @media (max-width: 1200px) { .transport { flex-wrap: wrap; } }
 
-.chip.sugg { background: var(--brand-soft); color: var(--ink); display: inline-flex; gap: 6px; align-items: center; white-space: normal; }
-.chip.sugg.busy { color: var(--muted); }
 
 .workclock { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .chip.auto { background: color-mix(in srgb, var(--ok) 14%, var(--panel)); color: var(--ok); display: inline-flex; gap: 6px; align-items: center; }

@@ -173,8 +173,7 @@ function tickJobs() {
 setInterval(tickJobs, 250);
 
 // Poll every second while something runs, every 3 s when idle, every 10 s while the window is minimised
-// (the server quits a browser-mode session after 90 s without a poll). An open editor tells the server, which keeps
-// (or loads) the model "Hør på nytt" needs and frees it otherwise.
+// (the server quits a browser-mode session after 90 s without a poll).
 function busyNow() {
   const st = S.state;
   if (!st) return true;
@@ -192,8 +191,7 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
 async function poll() {
   clearTimeout(S.pollT);
   try {
-    const visible = document.visibilityState === "visible";
-    S.state = await api("GET", "/api/state" + (S.editor && visible ? `?editing=${encodeURIComponent(S.editor.id)}` : ""));
+    S.state = await api("GET", "/api/state");
     if (S.state.now) S.skew = S.state.now - Date.now() / 1000;
     if (route().name === "settings" || Object.keys(S.dl || {}).length) S.dl = await api("GET", "/api/downloads");
     $("#offline").hidden = true;
@@ -238,7 +236,7 @@ async function render() {
   document.body.classList.toggle("editing", r.name === "edit");
   if (!S.state) return;
   if (r.name === "settings") viewSettings();
-  else if (r.name === "edit") { if (!S.editor) { S.editor = new Editor(r.id); schedulePoll(0); } }  // poll now: the server starts loading the model
+  else if (r.name === "edit") { if (!S.editor) { S.editor = new Editor(r.id); } }
   else viewJobs();
 }
 window.addEventListener("hashchange", render);
