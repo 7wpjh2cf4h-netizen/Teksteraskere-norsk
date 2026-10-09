@@ -4,65 +4,53 @@
 <meta charset="utf-8">
 <title>Teksting</title>
 <!-- Loading screen for the app window (tekst/launch.py fills in __URL__ and __LANG__).
-     A small typewriter types "Teksting" with a subtitle-yellow bar under it, in the app's own colours
-     (tokens copied from style.css). Switches to the app once the server answers and the first word is typed. -->
+     A quiet line drawing of a typewriter types "Teksting" with a pale subtitle-yellow bar under it.
+     Only soft, muted colours (from the app's tokens). Switches to the app once the server answers. -->
 <style>
   :root {
-    --paper: #edf1f4; --panel: #ffffff; --ink: #16212a; --muted: #5a6873; --line: #d2dae1;
-    --brand: #1f4f78; --brand-soft: #e1ebf4; --cue: #ffd84d;
+    --paper: #edf1f4; --sheet: #ffffff; --stroke: #b9c4cd; --text: #7d8a95; --muted: #8f9aa4;
+    --cue: #f1dd95; --key-down: #f1dd95;
     --font-display: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
   }
   @media (prefers-color-scheme: dark) {
-    :root { --paper: #10171d; --panel: #172129; --ink: #e4ebf0; --muted: #98a7b3; --line: #2d3b46;
-      --brand: #3f7fb8; --brand-soft: #1d3346; }
+    :root { --paper: #10171d; --sheet: #141d24; --stroke: #3b4a55; --text: #8796a2; --muted: #6f7e8a;
+      --cue: #6e6237; --key-down: #6e6237; }
   }
   html, body { margin: 0; height: 100%; background: var(--paper); overflow: hidden; }
-  body { display: grid; place-items: center; font-family: var(--font-display); color: var(--ink);
-    transition: opacity .25s ease; }
+  body { display: grid; place-items: center; font-family: var(--font-display); transition: opacity .25s ease; }
   body.out { opacity: 0; }
-  main { display: grid; justify-items: center; gap: 18px; animation: in .35s ease-out both; }
-  @keyframes in { from { opacity: 0; transform: translateY(6px); } }
-  svg { width: 240px; height: auto; overflow: visible; }
-  #caption { font-size: 13px; letter-spacing: .06em; color: var(--muted); }
+  main { display: grid; justify-items: center; gap: 16px; animation: in .4s ease-out both; }
+  @keyframes in { from { opacity: 0; } }
+  svg { width: 200px; height: auto; overflow: visible; }
+  #caption { font-size: 12px; letter-spacing: .08em; color: var(--muted); }
 
-  .stroke { stroke: var(--ink); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
-  #carriage { transition: transform .11s cubic-bezier(.3,.7,.4,1); }
-  #carriage.return { transition: transform .38s cubic-bezier(.6,0,.3,1); }
-  #sheet { transition: transform .38s cubic-bezier(.6,0,.3,1); }
-  .key { transition: transform .08s ease, fill .08s ease; }
-  .key.down { transform: translateY(2px); fill: var(--cue); }
-  #ding { opacity: 0; }
-  #ding.on { animation: ding .7s ease-out; }
-  @keyframes ding { 0% { opacity: 0; transform: translate(0, 4px) scale(.7); } 25% { opacity: 1; transform: none; }
-    100% { opacity: 0; transform: translate(4px, -8px); } }
-  #bar { transition: width .11s ease; }
+  .line { fill: none; stroke: var(--stroke); stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
+  #carriage { transition: transform .12s cubic-bezier(.3,.7,.4,1); }
+  #carriage.return { transition: transform .45s cubic-bezier(.6,0,.3,1); }
+  .key { fill: var(--paper); transition: transform .09s ease, fill .09s ease; }
+  .key.down { transform: translateY(1.5px); fill: var(--key-down); }
+  #bar { transition: width .12s ease; }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style>
 </head>
 <body>
 <main>
-  <svg viewBox="0 0 220 176" role="img" aria-label="Teksting">
-    <!-- carriage: sheet of paper + platen roller; slides left as letters are typed -->
+  <svg viewBox="0 0 220 160" role="img" aria-label="Teksting">
+    <!-- carriage: sheet + roller, slides left as letters are typed -->
     <g id="carriage">
-      <g id="sheet">
-        <rect x="58" y="6" width="104" height="84" rx="4" fill="var(--panel)" class="stroke"/>
-        <g id="lines">
-          <text id="typed" x="70" y="44" font-size="17" font-weight="600" fill="var(--ink)"
-            font-family="var(--font-display)"></text>
-          <rect id="bar" x="70" y="52" width="0" height="5" rx="2.5" fill="var(--cue)"/>
-        </g>
-      </g>
-      <rect x="40" y="78" width="140" height="16" rx="8" fill="var(--ink)"/>
-      <circle cx="36" cy="86" r="8" fill="var(--brand)" class="stroke"/>
-      <circle cx="184" cy="86" r="8" fill="var(--brand)" class="stroke"/>
+      <rect x="62" y="10" width="96" height="72" rx="3" fill="var(--sheet)" class="line"/>
+      <text id="typed" x="72" y="44" font-size="15" font-weight="500" fill="var(--text)"
+        style="font-family: var(--font-display)"></text>
+      <rect id="bar" x="72" y="51" width="0" height="3.5" rx="1.75" fill="var(--cue)"/>
+      <rect x="46" y="78" width="128" height="10" rx="5" fill="var(--paper)" class="line"/>
+      <circle cx="42" cy="83" r="4" fill="var(--paper)" class="line"/>
+      <circle cx="178" cy="83" r="4" fill="var(--paper)" class="line"/>
     </g>
     <!-- body -->
-    <path d="M30 98 H190 L204 164 Q205 170 199 170 H21 Q15 170 16 164 Z" fill="var(--brand)" class="stroke"/>
-    <path d="M102 98 L110 106 L118 98" fill="var(--cue)" class="stroke"/>
+    <path d="M38 96 H182 L194 148 Q195 152 191 152 H29 Q25 152 26 148 Z" fill="var(--paper)" class="line"/>
+    <path d="M106 96 L110 100 L114 96" class="line"/>
     <g id="keys"></g>
-    <rect id="space" class="key stroke" x="78" y="154" width="64" height="8" rx="4" fill="var(--panel)"/>
-    <text id="ding" x="192" y="66" font-size="11" font-weight="600" fill="var(--muted)"
-      font-family="var(--font-display)">ding</text>
+    <rect id="space" class="key line" x="84" y="138" width="52" height="5" rx="2.5"/>
   </svg>
   <div id="caption"></div>
 </main>
@@ -75,15 +63,14 @@
   document.getElementById("caption").textContent = /^(nb|no|nn)/i.test(lang) ? "Starter …" : "Starting …";
 
   // three rows of round keys on the body
-  var keys = [], rows = [[8, 116], [7, 131], [6, 145]];
+  var keys = [], rows = [[7, 112], [6, 125]];
   rows.forEach(function (r, i) {
     for (var k = 0; k < r[0]; k++) {
       var c = document.createElementNS(NS, "circle");
-      c.setAttribute("cx", (110 + (k - (r[0] - 1) / 2) * 17 + (i === 1 ? 0 : 0)).toFixed(1));
+      c.setAttribute("cx", (110 + (k - (r[0] - 1) / 2) * 15).toFixed(1));
       c.setAttribute("cy", r[1]);
-      c.setAttribute("r", "5.5");
-      c.setAttribute("class", "key stroke");
-      c.setAttribute("fill", "var(--panel)");
+      c.setAttribute("r", "3.6");
+      c.setAttribute("class", "key line");
       document.getElementById("keys").appendChild(c);
       keys.push(c);
     }
@@ -91,15 +78,14 @@
   keys.push(document.getElementById("space"));
 
   var typed = document.getElementById("typed"), bar = document.getElementById("bar");
-  var carriage = document.getElementById("carriage"), sheet = document.getElementById("sheet");
-  var ding = document.getElementById("ding");
+  var carriage = document.getElementById("carriage");
   var TYPE_X = 110;  // the typing point (the yellow guide on the body)
   var line = 0, wordsDone = 0;
 
   function setCarriage(textWidth, returning) {
     // keep the end of the typed text under the guide: the carriage moves left as the line grows
     carriage.classList.toggle("return", !!returning);
-    carriage.style.transform = "translateX(" + (TYPE_X - 70 - textWidth).toFixed(1) + "px)";
+    carriage.style.transform = "translateX(" + (TYPE_X - 72 - textWidth).toFixed(1) + "px)";
   }
   function press() {
     var k = keys[Math.floor(Math.random() * keys.length)];
@@ -122,12 +108,7 @@
       if (i < WORD.length) { setTimeout(next, ready ? 25 : 80 + Math.random() * 50); return; }
       wordsDone++;
       go();
-      setTimeout(function () {           // ding, line feed, carriage return, type again
-        ding.classList.remove("on"); void ding.getBBox(); ding.classList.add("on");
-        line++;
-        sheet.style.transform = "translateY(" + (-6 * (line % 3)) + "px)";
-        typeWord();
-      }, 650);
+      setTimeout(function () { line++; typeWord(); }, 700);  // carriage return, type again
     }, line ? 380 : 120);
   }
 
