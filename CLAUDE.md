@@ -267,6 +267,16 @@ Open (2026-10-08):
 - New UI text → `i18n.js` in nb + en. Check Norwegian plurals ("1 sted" vs "2 steder").
 - Long-running work goes through `Worker`/`Exporter`, never in a request handler.
 - After changing UI, test in fake mode at 1440×900 and a narrow (~400 px) window, light and dark.
+- Tests: `dev\test.bat` (pytest, 51 tests, ~5 s; fake transcription, temp data folder — see tests/conftest.py).
+  Run them before every commit; add a test with every bug fix. No JS tests: the editor is verified in a
+  headless browser per change.
+- `style.css` has ONE rule per selector, grouped by screen (tokens, base, top bar, controls, pages, editor,
+  overlays), with the media queries and reduced-motion block last. Edit the existing rule; never append an
+  override at the end (that is how it grew to 640 lines of layered patches before 2026-10-09). Where order
+  matters between equal-specificity rules there is a comment (`.keys-btn.on` after the transport rules,
+  `.timeline .blk.sel` after `.active`, `.tools-row` after `.trow`, `.cue:hover` after `.cue.sel`).
+- README.md (English, for developers) and `LES MEG.txt` (Norwegian, for users, goes in the zip) must be
+  updated when features change.
 - Never edit files in `data\` by hand while the app runs.
 - Python scripts that rewrite files: `write_text(..., newline="
 ")` (Windows otherwise writes CRLF).
