@@ -93,6 +93,7 @@ class Editor {
     this.alive = false;
     document.removeEventListener("keydown", this.onKey);
     window.removeEventListener("resize", this.onResize);
+    if (this.stageRO) this.stageRO.disconnect();
     if (this.dirty) await this.save(true);
     if (this.video) { this.video.pause(); this.video.removeAttribute("src"); this.video.load(); }
   }
@@ -108,6 +109,14 @@ class Editor {
     this.isAudio = /\.(mp3|wav|m4a|aac|flac|ogg)$/i.test(this.meta.name);
     this.stage = h("div", { class: "stage" + (this.isAudio ? " audio" : "") }, this.video,
       this.isAudio ? h("div", { class: "audio-note" }, t("audio_only")) : null, this.overlay, this.stageMsg);
+    // Remember the stage size instead of reading it on every keystroke: reading clientWidth right after the
+    // list changed forced a layout of the whole page (~30 ms per key with 700 cues).
+    this.stageSize = null;
+    this.stageRO = new ResizeObserver(() => {
+      this.stageSize = { w: this.stage.clientWidth, h: this.stage.clientHeight };
+      this.layoutOverlay();
+    });
+    this.stageRO.observe(this.stage);
     this.video.addEventListener("error", () => { this.stageMsg.hidden = false; this.stageMsg.textContent = t("video_unplayable"); });
     this.video.addEventListener("play", () => (this.playBtn.innerHTML = ICON.pause));
     this.video.addEventListener("pause", () => (this.playBtn.innerHTML = ICON.play));
@@ -834,7 +843,8 @@ class Editor {
     this.styleTimer = setTimeout(() => saveSettings({ style: this.style }).catch(() => {}), 500);
   }
   videoBox() {
-    const W = this.stage.clientWidth, H = this.stage.clientHeight;
+    const W = this.stageSize ? this.stageSize.w : this.stage.clientWidth;
+    const H = this.stageSize ? this.stageSize.h : this.stage.clientHeight;
     const vw = this.video.videoWidth, vh = this.video.videoHeight;
     if (!vw || !vh || this.isAudio) return { x: 0, y: 0, w: W, h: H };
     const s = Math.min(W / vw, H / vh);

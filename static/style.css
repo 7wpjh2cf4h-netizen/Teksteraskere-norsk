@@ -264,6 +264,8 @@ kbd {
 .cue {
   background: var(--panel); border: 1px solid var(--line-soft); border-left: 4px solid transparent;
   border-radius: 8px; margin: 6px 0; padding: 7px 10px 8px 10px;
+  /* long videos have 700+ cues: let the browser skip layout/paint of the ones scrolled out of view */
+  content-visibility: auto; contain-intrinsic-size: auto 64px;
 }
 .cue.now { border-left-color: var(--cue); }
 .cue.sel { border-color: var(--brand); border-left-width: 4px; box-shadow: 0 0 0 1px var(--brand); }

@@ -120,6 +120,13 @@ to time-weighted ranges, measures real speed during decode, sends `rate`/`cap`/`
 header (link back to the list), and a toast "«name» er klar til korrektur" + "Åpne" when a queued video
 finishes. Uses `live()`/`RUNNING` from app.js (classic scripts share globals).
 
+### Editor speed with long videos (2026-10-09)
+Test: 60-min fake project (silent `anullsrc` audio, 683 cues), timings via CDP in the real window.
+Typing a key 77 → 23 ms, next cue 72 → 17 ms, open 602 → 252 ms. Causes: `videoBox()` read
+`stage.clientWidth` after DOM changes → forced layout of the whole page on every key (now cached via
+ResizeObserver); off-screen cues laid out anyway (now `content-visibility: auto` on `.cue`). Still slow-ish:
+`renderList()` rebuilds all cues (~95 ms) on split/merge/delete/replace-all. Re-measure after editor changes.
+
 ### Static files must never come from a stale cache (fixed 2026-10-09)
 The app window keeps its HTTP cache between runs (pywebview `private_mode=False`); it reused old app.js /
 editor.js after an update without even asking the server. Now `index()` adds `?v=<newest static mtime>` to
