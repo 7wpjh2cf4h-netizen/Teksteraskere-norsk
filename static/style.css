@@ -219,7 +219,7 @@ body.editing main { flex: 1; min-height: 0; }
   --wave: #a9bccd; --wave-sel: #1f4f78;
 }
 .timeline .wave { position: absolute; left: 0; right: 0; bottom: 4px; height: 44px; width: 100%; }
-.timeline .tl-layer { position: absolute; inset: 0; }
+.timeline .tl-layer { position: absolute; inset: 0; will-change: transform; }
 .timeline .tick { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--line-soft); font-style: normal; }
 .timeline .tick.major { background: var(--line); }
 .timeline .tick b {
@@ -238,7 +238,7 @@ body.editing main { flex: 1; min-height: 0; }
 .timeline .hd.l { left: 0; }
 .timeline .hd.r { right: 0; }
 .timeline .playhead {
-  position: absolute; top: 0; bottom: 0; width: 3px; margin-left: -1px; background: var(--cue);
+  position: absolute; top: 0; bottom: 0; left: 0; width: 3px; margin-left: -1px; background: var(--cue); will-change: transform;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.28); pointer-events: none; z-index: 3;
 }
 .keys { font-size: 12px; color: var(--muted); line-height: 2; }

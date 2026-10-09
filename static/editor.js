@@ -1053,30 +1053,53 @@ class Editor {
   }
 
   // ================================================================ timeline
+  // The playing position, smoothed: between the video's own clock updates it runs on with real time, so the
+  // playhead glides instead of stepping. A seek or a real drift (> 0.25 s) snaps straight back to the video.
+  smoothTime() {
+    const v = this.video, ct = v.currentTime, now = performance.now();
+    const c = this.clk;
+    if (v.paused || v.seeking || !c) { this.clk = { t: ct, at: now }; return ct; }
+    const pred = c.t + ((now - c.at) / 1000) * v.playbackRate;
+    if (Math.abs(ct - pred) > 0.25) { this.clk = { t: ct, at: now }; return ct; }
+    c.t = pred + (ct - pred) * 0.08;  // drift gently towards the video clock
+    c.at = now;
+    return c.t;
+  }
+  // The blocks and ticks are built for two window widths at a time and only slid sideways (GPU transform) each frame;
+  // they are rebuilt when the view runs off that strip or something in it changes. The playhead moves the same way,
+  // in sub-pixel steps, instead of jumping whole pixels with a full rebuild every frame.
   drawTimeline(force) {
     if (!this.tl) return;
-    const tm = this.drag ? this.drag.center : this.video.currentTime;
+    const now = this.drag ? this.video.currentTime : this.smoothTime();
+    const tm = this.drag ? this.drag.center : now;
     const W = this.win;
+    const width = this.tl.clientWidth || 1;
     const t0 = Math.max(0, tm - W / 2);
-    const key = `${t0.toFixed(2)}|${this.sel}|${this.active}|${this.tl.clientWidth}`;
-    if (!force && key === this.tlKey) return;
-    this.tlKey = key;
     this.tlT0 = t0;
-    const pct = (s) => ((s - t0) / W) * 100;
-    const parts = [];
-    for (let s = Math.ceil(t0); s <= t0 + W; s++) {
-      const major = s % 5 === 0;
-      parts.push(`<i class="tick${major ? " major" : ""}" style="left:${pct(s)}%">${major ? `<b>${fmtTC(s, 0).replace(/^0:/, "")}</b>` : ""}</i>`);
+    const key = `${this.sel}|${this.active}|${width}|${W.toFixed(3)}`;
+    const b = this.tlBuilt;
+    if (force || key !== this.tlKey || !b || t0 < b.from || t0 + W > b.to) {
+      this.tlKey = key;
+      const from = Math.max(0, t0 - W / 2), to = t0 + W * 1.5;
+      this.tlBuilt = { from, to, base: from };
+      const px = (s) => (((s - from) / W) * width).toFixed(2);
+      const parts = [];
+      for (let s = Math.ceil(from); s <= to; s++) {
+        const major = s % 5 === 0;
+        parts.push(`<i class="tick${major ? " major" : ""}" style="left:${px(s)}px">${major ? `<b>${fmtTC(s, 0).replace(/^0:/, "")}</b>` : ""}</i>`);
+      }
+      this.cues.forEach((c, i) => {
+        if (c.end < from || c.start > to) return;
+        const cls = ["blk", i === this.sel ? "sel" : "", i === this.active ? "active" : "", this.needsReview(i) ? "flag" : "", c.checked ? "ok" : ""].join(" ");
+        const txt = c.text.split("\n")[0].replace(/[<&]/g, (ch) => (ch === "<" ? "&lt;" : "&amp;"));
+        parts.push(`<div class="${cls}" data-i="${i}" style="left:${px(c.start)}px;width:${(((c.end - c.start) / W) * width).toFixed(2)}px"><span>${txt}</span>${i === this.sel ? `<em class="hd l" data-e="start" data-tip="${this.tipDrag}"></em><em class="hd r" data-e="end" data-tip="${this.tipDrag}"></em>` : ""}</div>`);
+      });
+      this.tlLayer.innerHTML = parts.join("");
     }
-    this.cues.forEach((c, i) => {
-      if (c.end < t0 || c.start > t0 + W) return;
-      const cls = ["blk", i === this.sel ? "sel" : "", i === this.active ? "active" : "", this.needsReview(i) ? "flag" : "", c.checked ? "ok" : ""].join(" ");
-      const txt = c.text.split("\n")[0].replace(/[<&]/g, (ch) => (ch === "<" ? "&lt;" : "&amp;"));
-      parts.push(`<div class="${cls}" data-i="${i}" style="left:${pct(c.start)}%;width:${pct(c.end) - pct(c.start)}%"><span>${txt}</span>${i === this.sel ? `<em class="hd l" data-e="start" data-tip="${this.tipDrag}"></em><em class="hd r" data-e="end" data-tip="${this.tipDrag}"></em>` : ""}</div>`);
-    });
-    parts.push(`<div class="playhead" style="left:${pct(this.video.currentTime)}%"></div>`);
-    this.tlLayer.innerHTML = parts.join("");
-    this.drawWave(t0, W);
+    this.tlLayer.style.transform = `translate3d(${(-((t0 - this.tlBuilt.base) / W) * width).toFixed(2)}px,0,0)`;
+    if (!this.playhead || !this.playhead.isConnected) this.tl.append(this.playhead = h("div", { class: "playhead" }));
+    this.playhead.style.transform = `translate3d(${(((now - t0) / W) * width).toFixed(2)}px,0,0)`;
+    if (force || t0 !== this.waveT0 || W !== this.waveW) { this.waveT0 = t0; this.waveW = W; this.drawWave(t0, W); }
   }
   drawWave(t0, W) {
     const c = this.wave;
@@ -1111,16 +1134,20 @@ class Editor {
     if (!p || !p.length) return;
     const R = this.peakRate;
     const mid = hgt / 2;
-    for (let x = 0; x < w; x += 2) {
-      const a = Math.floor((t0 + (x / w) * W) * R);
-      const b = Math.max(a + 1, Math.floor((t0 + ((x + 2) / w) * W) * R));
+    // Bars sit on a fixed grid of peak bins, not on screen pixels, so while the view scrolls each bar keeps its
+    // height and slides along instead of flickering as different bins fall into each pixel.
+    const per = Math.max(1, Math.round((2 / w) * W * R));
+    const barW = Math.max(1, Math.min(1.4, ((per / R) / W) * w * 0.7));
+    for (let a = Math.floor((t0 * R) / per) * per; a < p.length; a += per) {
+      const tSec = a / R;
+      const x = ((tSec - t0) / W) * w;
+      if (x > w) break;
       let v = 0;
-      for (let k = a; k < b && k < p.length; k++) if (p[k] > v) v = p[k];
+      for (let k = Math.max(0, a); k < a + per && k < p.length; k++) if (p[k] > v) v = p[k];
       if (!v) continue;
-      const tSec = t0 + (x / w) * W;
       ctx.fillStyle = sc && tSec >= sc.start && tSec <= sc.end ? this.waveSel : this.waveColor;
       const bh = Math.max(1, (v / 255) * (hgt - 4));
-      ctx.fillRect(x, mid - bh / 2, 1.4, bh);
+      ctx.fillRect(x, mid - bh / 2, barW, bh);
     }
   }
   tlDown(e) {
@@ -1172,7 +1199,7 @@ class Editor {
       const dur = this.video.duration || 1e9;
       const center = Math.min(dur, Math.max(0, c0 - ((ev.clientX - x0) / rect.width) * this.win));
       this.drag = { center };
-      this.drawTimeline(true);
+      this.drawTimeline(false);
       if (performance.now() - last > 80) { last = performance.now(); this.video.currentTime = center; }
     };
     const up = (ev) => {
@@ -1216,7 +1243,7 @@ class Editor {
     const now = performance.now();
     this.drag = { center: sc.center };
     if (moving && now - sc.lastSeek > 150) { sc.lastSeek = now; this.video.currentTime = sc.center; }
-    this.drawTimeline(true);
+    this.drawTimeline(false);
     if (moving || now - sc.lastInput < 120) { sc.raf = requestAnimationFrame(() => this.glideStep()); return; }
     this.win = sc.winTarget;
     this.drag = null;
