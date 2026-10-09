@@ -10,7 +10,7 @@ const STR = {
     resumed: "Fortsetter der du slapp (undertekst {n}).", from_start: "Fra starten",
     speed_now: "Hastighet {r}×", tip_keys: "Hurtigtaster (?)",
     keys_groups: [
-      ["Avspilling", [["Mellomrom", "spill / pause"], ["Ctrl+Mellomrom", "spill / pause i tekstfelt"], ["Alt+R", "hør underteksten på nytt"],
+      ["Avspilling", [["Mellomrom", "spill / pause"], ["Ctrl+Mellomrom", "spill / pause i tekstfelt"], ["Alt+R", "hør underteksten på nytt"], ["Ctrl+klikk et ord", "hør akkurat det ordet"],
         ["Alt+← / Alt+→", "5 sek tilbake / frem"], ["Alt+− / Alt++", "saktere / raskere"]]],
       ["Gå gjennom", [["Alt+↑ / Alt+↓", "forrige / neste"], ["Alt+G", "gå gjennom merknader"], ["Enter", "godkjenn og neste"],
         ["Alt+K", "godkjenn"], ["Esc", "ut av tekstfeltet"]]],
@@ -43,7 +43,8 @@ const STR = {
     tip_batch_burn: "Lager video med innbrent tekst for alle ferdige videoer, én om gangen i bakgrunnen.",
 
     f_rescued: "Modellen hoppet over dette først, hentet inn igjen: sjekk mot lyden",
-    hear_again: "Hør på nytt", tip_hear_again: "Spiller denne underteksten på nytt, så du kan høre vanskelige ord en gang til. Markøren blir stående i teksten. (Alt+R)",
+    hear_again: "Hør på nytt", tip_hear_again: "Spiller denne underteksten på nytt, så du kan høre vanskelige ord en gang til. Markøren blir stående i teksten. Ctrl+klikk et ord i teksten for å høre bare det. (Alt+R)",
+    slow_nudge: "Vanskelig å høre? Prøv å spille den saktere.", slow_play: "Spill sakte (0,75×)",
     st_rescued: "Hentet inn igjen tale som modellen hoppet over ({n} steder).",
     work_clock: "Arbeidstid {t}", work_title: "Telles bare når du er aktiv (har trykket noe siste 30 sekunder eller videoen spiller).",
     autofix: "Rettet automatisk: «{a}» ➜ «{b}»", autofix_title: "Lært fra rettelsene dine i tidligere videoer",
@@ -183,7 +184,7 @@ const STR = {
     resumed: "Picking up where you left off (subtitle {n}).", from_start: "From the start",
     speed_now: "Speed {r}×", tip_keys: "Keyboard shortcuts (?)",
     keys_groups: [
-      ["Playback", [["Space", "play / pause"], ["Ctrl+Space", "play / pause in a text field"], ["Alt+R", "hear the subtitle again"],
+      ["Playback", [["Space", "play / pause"], ["Ctrl+Space", "play / pause in a text field"], ["Alt+R", "hear the subtitle again"], ["Ctrl+click a word", "hear just that word"],
         ["Alt+← / Alt+→", "5 s back / forward"], ["Alt+− / Alt++", "slower / faster"]]],
       ["Review", [["Alt+↑ / Alt+↓", "previous / next"], ["Alt+G", "review warnings"], ["Enter", "approve and next"],
         ["Alt+K", "approve"], ["Esc", "leave the text field"]]],
@@ -216,7 +217,8 @@ const STR = {
     tip_batch_burn: "Makes videos with burned-in text for all finished videos, one at a time in the background.",
 
     f_rescued: "The model skipped this at first and recovered it: check against the audio",
-    hear_again: "Listen again", tip_hear_again: "Plays this subtitle again so you can hear difficult words once more. The cursor stays in the text. (Alt+R)",
+    hear_again: "Listen again", tip_hear_again: "Plays this subtitle again so you can hear difficult words once more. The cursor stays in the text. Ctrl+click a word in the text to hear just that word. (Alt+R)",
+    slow_nudge: "Hard to make out? Try playing it slower.", slow_play: "Play slowly (0.75×)",
     st_rescued: "Recovered speech the model skipped ({n} places).",
     work_clock: "Work time {t}", work_title: "Only counted while you are active (clicked or typed in the last 30 seconds, or the video is playing).",
     autofix: "Fixed automatically: “{a}” ➜ “{b}”", autofix_title: "Learned from your corrections in earlier videos",

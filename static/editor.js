@@ -65,6 +65,7 @@ class Editor {
     // model words: [start, end, confidence, text]
     const words = (d.words || []).map(([ws, we, wp, w]) => ({ s: ws, e: we, p: wp, w }));
     this.unsure = words.filter((w) => w.p < UNSURE_P && norm(w.w)).map((w) => ({ ...w, n: norm(w.w) }));
+    this.words = words.filter((w) => norm(w.w)).sort((a, b) => a.s - b.s);  // Ctrl+click a word to hear it
     this.starts = words.map((w) => w.s).sort((a, b) => a - b);
     this.ends = words.map((w) => w.e + SNAP_TAIL).sort((a, b) => a - b);
     this.build();
@@ -133,7 +134,10 @@ class Editor {
     this.stageRO.observe(this.stage);
     this.video.addEventListener("error", () => { this.stageMsg.hidden = false; this.stageMsg.textContent = t("video_unplayable"); });
     this.video.addEventListener("play", () => (this.playBtn.innerHTML = ICON.pause));
-    this.video.addEventListener("pause", () => (this.playBtn.innerHTML = ICON.play));
+    this.video.addEventListener("pause", () => {
+      this.playBtn.innerHTML = ICON.play;
+      if (this.restoreRate != null) { this.video.playbackRate = this.restoreRate; this.restoreRate = null; }  // after a slow replay
+    });
     for (const ev of ["play", "playing", "seeking", "seeked", "timeupdate", "loadeddata", "ratechange"]) this.video.addEventListener(ev, () => this.wake());
     this.video.addEventListener("loadedmetadata", () => { this.layoutOverlay(); this.drawTimeline(true); });
 
@@ -341,6 +345,7 @@ class Editor {
       this.changed(false);
     });
     for (const ev of ["keyup", "click", "select"]) ta.addEventListener(ev, () => (this.caret = ta.selectionStart));
+    ta.addEventListener("click", (e) => { if (e.ctrlKey && !e.altKey) this.hearAt(+el.dataset.i, ta.selectionStart); });
     this.fillRow(el, i);
     return el;
   }
@@ -754,10 +759,48 @@ class Editor {
     this.playCue(i);
     this.renderReviewBar();
   }
-  playCue(i) {
+  // rate: play this once at another speed (back to normal when it stops). Hearing the same subtitle again within
+  // 12 s nudges (once per subtitle) towards a slow replay; it never slows down by itself.
+  playCue(i, { rate } = {}) {
     const c = this.cues[i];
+    if (!c) return;
+    const now = Date.now(), r = this.lastPlay;
+    this.lastPlay = { c, at: now };
+    if (!rate && r && r.c === c && now - r.at < 12000 && !(this.nudged || (this.nudged = new WeakSet())).has(c)) {
+      this.nudged.add(c);
+      toast(t("slow_nudge"), { label: t("slow_play"), run: () => this.playCue(this.cues.indexOf(c), { rate: 0.75 }) }, 9000);
+    }
+    if (this.restoreRate != null) { this.video.playbackRate = this.restoreRate; this.restoreRate = null; }
+    if (rate) { this.restoreRate = this.video.playbackRate; this.video.playbackRate = rate; }
     this.playUntil = c.end + 0.15;
     this.video.currentTime = Math.max(0, c.start - 0.25);
+    this.video.play().catch(() => {});
+  }
+  // Ctrl+click on a word: play just that word with half a second around it. The text may have been edited, so the
+  // clicked word is matched to the model's words in this subtitle by spelling and position (or by its share of the line).
+  hearAt(i, pos) {
+    const c = this.cues[i];
+    if (!c) return;
+    const text = c.text, toks = [...text.matchAll(/[\p{L}\p{N}'’-]+/gu)];
+    if (!toks.length) return;
+    let k = toks.findIndex((m) => pos >= m.index && pos <= m.index + m[0].length);
+    if (k < 0) k = Math.max(0, toks.filter((m) => m.index < pos).length - 1);
+    const ws = (this.words || []).filter((w) => (w.s + w.e) / 2 >= c.start - 0.05 && (w.s + w.e) / 2 < c.end + 0.05);
+    const share = toks.length > 1 ? k / (toks.length - 1) : 0;
+    let s, e;
+    if (ws.length) {
+      const want = norm(toks[k][0]);
+      const same = ws.map((w, j) => [w, j]).filter(([w]) => norm(w.w) === want);
+      const pick = (arr) => arr.reduce((b, x) => (Math.abs(x[1] / Math.max(1, ws.length - 1) - share) < Math.abs(b[1] / Math.max(1, ws.length - 1) - share) ? x : b))[0];
+      const w = same.length ? pick(same) : ws[Math.round(share * (ws.length - 1))];
+      s = w.s; e = w.e;
+    } else {  // no model words (a subtitle you wrote yourself): estimate from where the word sits in the text
+      const dur = c.end - c.start, a = toks[k].index / text.length, b = (toks[k].index + toks[k][0].length) / text.length;
+      s = c.start + a * dur; e = c.start + b * dur;
+    }
+    if (this.restoreRate != null) { this.video.playbackRate = this.restoreRate; this.restoreRate = null; }
+    this.playUntil = e + 0.5;
+    this.video.currentTime = Math.max(0, s - 0.5);
     this.video.play().catch(() => {});
   }
   renderReviewBar() {
