@@ -92,8 +92,17 @@
     k.classList.add("down");
     setTimeout(function () { k.classList.remove("down"); }, 90);
   }
+  // Timeline from when the screen appears: first key at FIRST_MS, last key at DONE_MS,
+  // then the screen fades out so it is gone at SHOW_MS (or later, if the app is not ready yet).
+  var FIRST_MS = 100, DONE_MS = 2100, SHOW_MS = 2700, FADE_MS = 250;
+  var TYPE_MS = DONE_MS - FIRST_MS;
+  function gaps() {    // uneven, hand-typed rhythm that still adds up to exactly TYPE_MS
+    var w = [], sum = 0;
+    for (var g = 1; g < WORD.length; g++) { w.push(0.7 + Math.random() * 0.6); sum += w[w.length - 1]; }
+    return w.map(function (x) { return x / sum * TYPE_MS; });
+  }
   function typeWord() {
-    var i = 0;
+    var i = 0, delays = gaps();
     typed.textContent = "";
     bar.setAttribute("width", "0");
     setCarriage(0, true);
@@ -104,20 +113,19 @@
       bar.setAttribute("width", w.toFixed(1));
       setCarriage(w, false);
       press();
-      // once the app is ready, finish the word quickly instead of making the user wait for it
-      if (i < WORD.length) { setTimeout(next, ready ? 25 : 80 + Math.random() * 50); return; }
+      if (i < WORD.length) { setTimeout(next, delays[i - 1]); return; }
       wordsDone++;
       go();
       setTimeout(function () { line++; typeWord(); }, 700);  // carriage return, type again
-    }, line ? 380 : 120);
+    }, line ? 380 : FIRST_MS);
   }
 
   var ready = false, left = false, t0 = Date.now();
   function go() {
-    if (!ready || wordsDone < 1 || left) return;
+    if (!ready || wordsDone < 1 || left || Date.now() - t0 < SHOW_MS - FADE_MS) return;
     left = true;
     document.body.classList.add("out");
-    setTimeout(function () { location.replace(URL); }, 250);
+    setTimeout(function () { location.replace(URL); }, FADE_MS);
   }
   function ping() {
     fetch(URL + "api/ping", { mode: "no-cors", cache: "no-store" })
@@ -139,6 +147,7 @@
     typeWord();
   }
   ping();
+  setTimeout(go, SHOW_MS - FADE_MS);
 })();
 </script>
 </body>

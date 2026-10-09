@@ -67,7 +67,8 @@ WebView2 is built into Windows) owns the main thread and opens at once with `sta
 imports `server` and runs uvicorn beside it (`serve_in_background`). The loading page (a small typewriter
 typing "Teksting" with a yellow subtitle bar, app tokens, light/dark) pings `/api/ping` (fetch no-cors) and
 switches to the app itself; once ready it finishes the word fast (no waiting on the animation).
-Warm start, fake mode: loading screen 2.6 s, server 3.6 s, app ~4.2 s (was a blank 3.8 s). A "Hail the
+Fixed timeline (Jonas's choice, constants at the top of the script): "Jonas er best" fully typed at 2.1 s
+(DONE_MS), screen faded out at 2.7 s (SHOW_MS) or later if the server isn't ready; app on screen ~5.3 s from start. A "Hail the
 king" intro with Jonas's face was built and dropped on 2026-10-09 — he chose minimal and classy instead.
 `Teksting.vbs` skips the uv package check unless requirements.txt differs from `runtime\requirements.installed`
 (written by start.bat / the vbs): right after a reboot that no-op check took 7.8 s. Process AppUserModelID `Teksting.Teksting` = the ID that
