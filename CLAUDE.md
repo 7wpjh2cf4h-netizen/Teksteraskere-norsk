@@ -15,6 +15,12 @@ Claude Code on Jonas's PC on 2026-10-08. Read this fully before changing anythin
 - **Promise shown in the app**: everything runs locally, nothing is uploaded. Don't add cloud services without
   asking Jonas (a cloud AI proofreader was discussed and rejected for this reason).
 
+## Priorities (Jonas, 2026-10-09) — use these to decide every trade-off
+1. **Transcription accuracy beats speed, always.** Never trade accuracy for speed (no smaller beam, no
+   batched decoding, no partial double-check). Speed-ups are welcome only when output stays identical.
+2. **Proofreading editor: usability, UI functionality and speed** — this is where the human minutes go.
+- Burn-in is low priority: the friend won't use it (keep it working, don't invest in it).
+
 ## Subtitle rules (Netflix-style, Norwegian)
 42 chars/line, max 2 lines, 1–7 s per cue, max 17 chars/s, ≥0.08 s gap between cues, cue lingers 0.3 s after
 last word, never join across a 1.2 s pause. Light editing: filler words (eh, ehm, øh, mm, hm…) removed.
@@ -118,8 +124,7 @@ editor (with video playing) does not pause the queue; nothing in the UI calls /a
 ### Measured but not done (2026-10-09)
 - BatchedInferencePipeline (large, CPU, 6 threads): only ~10 % faster and 5 % of words differ → not worth it.
 - Pickled nb dictionary: loads in 3.8 s instead of 10.1 s, but the file is 98 MB.
-- h264_amf (AMD hardware encoder) works on Jonas's PC: 1.75x faster burn-in encode than libx264 veryfast;
-  quality not checked; on other PCs (Intel/NVIDIA) h264_qsv / h264_nvenc would need the same check.
+- h264_amf (AMD hardware encoder): 1.75x faster burn-in encode — dropped, burn-in is not used.
 
 ### Burn-in cleanup (fixed 2026-10-08)
 `burn.burn` always removes its temp folder and `.part.mp4` (done, cancelled, error). Deleting a project stops
