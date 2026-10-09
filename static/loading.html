@@ -17,7 +17,7 @@
       --cue: #6e6237; --key-down: #6e6237; }
   }
   html, body { margin: 0; height: 100%; background: var(--paper); overflow: hidden; }
-  body { display: grid; place-items: center; font-family: var(--font-display); transition: opacity .25s ease; }
+  body { display: grid; place-items: center; font-family: var(--font-display); transition: opacity .3s ease; }  /* = FADE_MS */
   body.out { opacity: 0; }
   main { display: grid; justify-items: center; gap: 16px; animation: in .4s ease-out both; }
   @keyframes in { from { opacity: 0; } }
@@ -93,8 +93,9 @@
     setTimeout(function () { k.classList.remove("down"); }, 90);
   }
   // Timeline from when the screen appears: first key at FIRST_MS, last key at DONE_MS,
-  // then the screen fades out so it is gone at SHOW_MS (or later, if the app is not ready yet).
-  var FIRST_MS = 100, DONE_MS = 2100, SHOW_MS = 2700, FADE_MS = 250;
+  // fade starts at SHOW_MS - FADE_MS (2.7 s) and the app shows at SHOW_MS (3.0 s), or later if it is not ready.
+  // The server boots in parallel the whole time (tekst/launch.py); this only decides when the app is shown.
+  var FIRST_MS = 100, DONE_MS = 2100, SHOW_MS = 3000, FADE_MS = 300;
   var TYPE_MS = DONE_MS - FIRST_MS;
   function gaps() {    // uneven, hand-typed rhythm that still adds up to exactly TYPE_MS
     var w = [], sum = 0;
