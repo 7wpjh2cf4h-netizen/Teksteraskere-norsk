@@ -149,10 +149,12 @@ class Editor {
       [t("shortcuts"), () => this.showKeys()],
       [t("resegment"), () => this.resegment(), t("tip_resegment")],
     ], "btn small quiet", t("more"));
+    // the rest of the queue keeps transcribing while you proofread: show how far it is
+    this.queueEl = h("a", { class: "ed-queue", href: "#/", hidden: true, "data-tip": t("tip_queue") });
     const head = h("div", { class: "ed-head" },
       h("a", { class: "back", href: "#/", html: ICON.back + `<span>${t("back_all")}</span>` }),
       h("h1", { title: this.meta.path }, this.meta.name),
-      this.status, this.workEl, this.exportState,
+      this.status, this.workEl, this.exportState, this.queueEl,
       h("div", { class: "ed-actions" },
         this.reviewBtn,
         h("button", { class: "btn small", type: "button", onclick: () => this.togglePanel("find"), "data-tip": t("tip_find") }, t("find_replace")),
@@ -182,8 +184,30 @@ class Editor {
   }
 
   // sync with server state (export progress)
+  syncQueue(st) {
+    if (!this.queueEl) return;
+    const cur = st.jobs.find((j) => RUNNING.includes(j.status) && j.id !== this.id);
+    const waiting = st.jobs.filter((j) => j.status === "queued").length;
+    let text = "";
+    if (cur) {
+      const pct = Math.floor(live(cur).p * 100);
+      text = cur.status === "downloading" ? t("eq_downloading", { pct }) : t("eq_working", { name: cur.name, pct });
+      if (waiting) text += " · " + t("eq_more", { n: waiting });
+    } else if (waiting && st.paused) text = t("eq_paused");
+    if (this.queueEl.textContent !== text) this.queueEl.textContent = text;
+    this.queueEl.hidden = !text;
+    // a video in the queue just finished: offer to open it
+    if (this.lastRunning && (!cur || cur.id !== this.lastRunning)) {
+      const done = st.jobs.find((j) => j.id === this.lastRunning && j.status === "done");
+      if (done) toast(t("eq_ready", { name: done.name }), { label: t("eq_open"), run: () => (location.hash = "#/edit/" + done.id) });
+    }
+    this.lastRunning = cur ? cur.id : null;
+  }
+
   sync(st) {
-    if (!st || !this.exportState) return;
+    if (!st) return;
+    this.syncQueue(st);
+    if (!this.exportState) return;
     const m = st.jobs.find((j) => j.id === this.id);
     const x = m && m.export;
     this.exportState.replaceChildren();

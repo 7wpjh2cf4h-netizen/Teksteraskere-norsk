@@ -563,3 +563,14 @@ body { font-size: 15px; }
 .timeline { cursor: grab; touch-action: none; user-select: none; }
 .timeline .hd { cursor: ew-resize; }
 .timeline.pulling, .timeline.pulling * { cursor: grabbing !important; }
+
+/* editor: background queue progress */
+.ed-queue { display: inline-block; font-size: 13px; color: var(--muted); text-decoration: none;
+  white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
+.ed-queue[hidden] { display: none; }
+.ed-queue::before { content: ""; display: inline-block; width: 7px; height: 7px; margin: 0 7px 1px 0;
+  border-radius: 50%; background: var(--cue); vertical-align: middle;
+  animation: eq-pulse 1.6s ease-in-out infinite; }
+.ed-queue:hover { color: var(--brand); }
+@keyframes eq-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .ed-queue::before { animation: none; } }

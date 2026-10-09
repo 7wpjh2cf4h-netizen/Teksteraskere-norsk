@@ -7,6 +7,7 @@ os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
 
 import json
 import mimetypes
+import re
 import socket
 import subprocess
 import sys
@@ -753,9 +754,27 @@ def show_window():
     return {"ok": True}
 
 
+@app.middleware("http")
+async def revalidate_static(request: Request, call_next):
+    """The app window keeps an HTTP cache between runs. Without this it reused old app.js/editor.js after an
+    update (no request at all). "no-cache" = always ask; unchanged files cost only a 304."""
+    response = await call_next(request)
+    if request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
+def _asset_version():
+    return str(int(max(p.stat().st_mtime for p in (APP_DIR / "static").iterdir() if p.is_file())))
+
+
 @app.get("/")
 def index():
-    return FileResponse(APP_DIR / "static" / "index.html", headers={"Cache-Control": "no-store"})
+    # ?v=<newest file time> on every /static/ link: an updated app can never run with yesterday's cached files
+    html = (APP_DIR / "static" / "index.html").read_text(encoding="utf-8")
+    v = _asset_version()
+    html = re.sub(r'((?:src|href)="/static/[^"?]+)"', lambda m: f'{m.group(1)}?v={v}"', html)
+    return Response(html, media_type="text/html", headers={"Cache-Control": "no-store"})
 
 
 app.mount("/static", StaticFiles(directory=APP_DIR / "static"), name="static")
@@ -813,10 +832,11 @@ def wait_until_ready():
 
 
 def warm_speller():
-    """Loading the dictionary takes ~10 s of pure Python and slows everything else down,
-    so it waits until the server answers and the window has had time to open."""
+    """Loading the dictionary takes ~10 s of pure Python. It starts as soon as the server answers, while the
+    loading screen still shows, so spelling flags are ready ~10 s after start. Other threads keep running
+    meanwhile (longest pause ~0.7 s). Tried and rejected (2026-10-09): a pickled copy loads in 3.7 s but
+    freezes the whole app for ~3 s in one go; a chunked copy took 8.9 s with 2 s pauses."""
     wait_until_ready()
-    time.sleep(6 if APP_MODE else 0)
     speller.warm(store.settings()["language"])
 
 

@@ -8,7 +8,7 @@ Claude Code on Jonas's PC on 2026-10-08. Read this fully before changing anythin
 - **Jonas** (owner, builds this with Claude). Not a programmer: explain commands, prefer doing over telling,
   keep answers concise, challenge his ideas rather than agreeing, and use Socratic questions when he is learning.
 - **End user**: a friend who subtitles corporate videos for a big company's website. Today he downloads videos
-  from Vimeo, writes captions in Adobe Premiere Pro, and sends a **CSV of captions with timestamps** to a colleague.
+  from Vimeo, writes captions in Adobe Premiere Pro, and delivers **SRT** files (confirmed by Jonas 2026-10-09: no CSV needed).
 - **Goal**: under 6 min of human work per 1 min of video (Jonas: "we should beat that by a lot").
   The app measures this ("Arbeidstid" per video, average vs goal on the Videoer page).
 - **Hardware**: laptop CPU only. Transcribe overnight, proofread by day.
@@ -115,6 +115,16 @@ to time-weighted ranges, measures real speed during decode, sends `rate`/`cap`/`
 - `Store` caches meta.json in memory (all writes go through it): `/api/state` with 60 videos was 71 ms,
   polled every second. Don't edit meta.json by hand while the app runs.
 
+### Editor: background queue (2026-10-09)
+`Editor.syncQueue` (called from poll every second): "• Transkriberer <name> · 38 % · +2 i kø" in the editor
+header (link back to the list), and a toast "«name» er klar til korrektur" + "Åpne" when a queued video
+finishes. Uses `live()`/`RUNNING` from app.js (classic scripts share globals).
+
+### Static files must never come from a stale cache (fixed 2026-10-09)
+The app window keeps its HTTP cache between runs (pywebview `private_mode=False`); it reused old app.js /
+editor.js after an update without even asking the server. Now `index()` adds `?v=<newest static mtime>` to
+every /static/ link and a middleware sends `Cache-Control: no-cache` for /static/. Keep both.
+
 ### Queue order (2026-10-09)
 `queue_key` in server.py: shortest *duration* first (not file size: transcription time follows length), unknown
 length last by size. The worker picks with it and `state()` lists jobs in the same order (`list_order`: running,
@@ -181,9 +191,10 @@ Open (2026-10-08):
 
 ## Open work (priority order)
 1. **Verify the untested Windows items above**; read `data\teksting.log` for errors.
-2. **CSV export in the colleague's exact format** — waiting for Jonas to get an example CSV. Don't guess the
-   format; ask for the file. Likely Premiere-style (start/end timecodes + text), check delimiter, timecode
-   format (frames vs ms), encoding (UTF-8 BOM for Excel?).
+2. **Measure transcription accuracy** — Jonas is asking the friend for 2–3 old videos + his final SRTs. Use them
+   as ground truth: word error rate of today's pipeline, then test accuracy-only changes (beam size up, VAD
+   settings, hotwords/glossary) and keep only what measurably helps. Also check his SRT style (line breaks,
+   timing) against ours.
 3. **Vimeo** — unknown whether the colleague uploads captions to Vimeo and whether we can get account access.
    Options: paste a Vimeo link to import the video; upload the finished track via Vimeo API. Ask first.
 4. Collect real work-time numbers from 3–5 videos (Videoer page) and find where time goes.
