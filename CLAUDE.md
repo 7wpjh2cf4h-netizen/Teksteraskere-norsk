@@ -109,14 +109,25 @@ to time-weighted ranges, measures real speed during decode, sends `rate`/`cap`/`
 - `cpu_threads=physical_cores()` (4–8): large model 80.5 s → 59.9 s per 60 s of speech vs the default 4
   threads, identical text. 12 threads (hyper-threads) is *slower*. Small model gains nothing.
 - Large ≈ 1× real time on this PC; a whole job (large + rescue + small double-check) ≈ 1.7× real time.
-- `Engine._loaded` keeps large + small loaded (~2 GB RAM): no reload per video in a queue (−20 s/video).
+- `Engine._loaded` keeps large + small loaded while the queue has work: no reload per video (−20 s/video).
+- RAM (measured 2026-10-09): large 1.53 GB (loads in ~5 s warm), small 0.26 GB (~1 s), speller 0.53 GB
+  (~12 s, pure-Python spylls; kept — dropping it would cost 12 s per editor open), rest ~0.1 GB. Window
+  (WebView2) ~0.7 GB. Idle with both models loaded the app was ~3.2 GB.
+- Freeing idle models (`Worker.free_idle_models`): empty queue → small freed at once; the main/editor model
+  is kept while a visible editor polls (`/api/state?editing=<pid>`) and freed `TEKSTING_IDLE_FREE` (600 s)
+  after the last editor/job use. Opening an editor preloads it in the background (`Engine.preload`; other
+  threads pause ≤ 0.2 s during the load), so it is ready before the first "Hør på nytt".
+- Polling: 1 s while anything runs/queues/exports/downloads, 3 s idle, 10 s while the window is hidden
+  (must stay < 90 s: the browser-mode watchdog quits after 90 s without a poll). `/api/downloads` only on the
+  settings page or during a download. Editor `loop()` sleeps after ~30 still frames while paused; video
+  events (`play`, `seeking`, `timeupdate` ...) call `wake()`.
 - `Engine.audio()` decodes each file once per job (bit-identical to the old per-step decode, verified);
   waveform via `peaks_from_audio` (correlation 0.999 with `compute_peaks`, which is still the fallback).
 - `Store` caches meta.json in memory (all writes go through it): `/api/state` with 60 videos was 71 ms,
   polled every second. Don't edit meta.json by hand while the app runs.
 
 ### Editor: background queue (2026-10-09)
-`Editor.syncQueue` (called from poll every second): "• Transkriberer <name> · 38 % · +2 i kø" in the editor
+`Editor.syncQueue` (called from every poll): "• Transkriberer <name> · 38 % · +2 i kø" in the editor
 header (link back to the list), and a toast "«name» er klar til korrektur" + "Åpne" when a queued video
 finishes. Uses `live()`/`RUNNING` from app.js (classic scripts share globals).
 

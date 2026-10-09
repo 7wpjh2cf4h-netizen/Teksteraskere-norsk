@@ -150,6 +150,9 @@ def time_scale():
     return min(4.0, max(0.25, r[len(r) // 2])) if r else 1.0
 
 
+IDLE_FREE_S = float(os.environ.get("TEKSTING_IDLE_FREE", "600"))  # free the editor's model after 10 min unused
+
+
 class Worker(threading.Thread):
     def __init__(self):
         super().__init__(daemon=True)
@@ -165,6 +168,7 @@ class Worker(threading.Thread):
             job = min(queued, key=queue_key) if queued else None
             if job is None:
                 keep_awake(False)
+                self.free_idle_models()
                 self.wake.wait(2)
                 self.wake.clear()
                 continue
@@ -184,6 +188,26 @@ class Worker(threading.Thread):
                 self.current = None
                 self.downloading.clear()
                 engine.drop_audio()
+                self.last_job = time.time()
+
+    last_job = 0.0
+
+    def free_idle_models(self):
+        """Empty queue: give the RAM back (large ~1.5 GB, small ~0.26 GB). The double-check model goes at once
+        (only transcription uses it); the editor's model stays while an editor is open and visible, and goes when
+        neither an editor nor the queue has used it for IDLE_FREE_S. Opening an editor loads it again in the
+        background (~5 s), so it is normally ready before the first "Hør på nytt". A new video reloads in ~1-5 s."""
+        if not engine._loaded:
+            return
+        now = time.time()
+        keep = set()
+        main = EDITOR["model"] or store.settings().get("model")
+        if main and now - max(EDITOR["seen"], self.last_job) < IDLE_FREE_S:
+            keep.add(main)
+        if engine._loaded.keys() - keep:
+            gone = engine.unload(keep)
+            if gone:
+                print("freed idle models:", ", ".join(gone))
 
     def ensure_model(self, pid, name):
         """Download the model if needed. Returns False (and marks the job) if it failed."""
@@ -381,11 +405,25 @@ def ping():
 
 
 LAST_SEEN = [time.time()]
+EDITOR = {"seen": 0.0, "model": None}  # when a visible editor last polled, and the model its "Hør på nytt" uses
+
+
+def listen_model(m):
+    """The model "Hør på nytt" / "Ny undertekst her" use for this project."""
+    return m["model"] if engine.is_ready(m["model"]) else next((n for n in ("large", "medium", "small") if engine.is_ready(n)), None)
 
 
 @app.get("/api/state")
-def get_state():
+def get_state(editing: str = ""):
     LAST_SEEN[0] = time.time()
+    if editing:  # an editor is open and visible: have its model ready before the first "Hør på nytt"
+        try:
+            name = listen_model(store.get(editing))
+        except Exception:
+            name = None
+        if name:
+            EDITOR.update(seen=time.time(), model=name)
+            engine.preload(name)
     return {**state(), "app_mode": APP_MODE}
 
 
@@ -622,7 +660,8 @@ def srt(pid: str):
 @app.post("/api/projects/{pid}/listen")
 def listen(pid: str, start: float = Body(...), end: float = Body(...)):
     m = project(pid)
-    name = m["model"] if engine.is_ready(m["model"]) else next((n for n in ("large", "medium", "small") if engine.is_ready(n)), None)
+    name = listen_model(m)
+    EDITOR.update(seen=time.time(), model=name)
     if not name:
         raise HTTPException(409, "No speech model downloaded")
     s = store.settings()

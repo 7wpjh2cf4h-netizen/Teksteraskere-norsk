@@ -137,7 +137,8 @@ class Engine:
         return (d / "model.bin").exists() and (d / "config.json").exists()
 
     def status(self):
-        return {n: {"ready": self.is_ready(n), "size": m["size"], "speed": m["speed"]} for n, m in MODELS.items()}
+        return {n: {"ready": self.is_ready(n), "loaded": n in self._loaded, "size": m["size"], "speed": m["speed"]}
+                for n, m in MODELS.items()}
 
     def delete(self, name):
         with self.lock:
@@ -196,6 +197,33 @@ class Engine:
 
     def is_loaded(self, name):
         return name in self._loaded
+
+    def preload(self, name):
+        """Load a model in the background (other threads pause at most ~0.2 s while large loads)."""
+        if name in self._loaded or not self.is_ready(name) or getattr(self, "_preloading", None) == name:
+            return
+        self._preloading = name
+
+        def go():
+            try:
+                self._model(name)
+            except Exception as e:
+                print("preload failed:", e)
+            finally:
+                self._preloading = None
+        threading.Thread(target=go, daemon=True).start()
+
+    def unload(self, keep=()):
+        """Free every loaded model not in `keep` (large holds ~1.5 GB of RAM, small ~0.26 GB). A transcription or
+        listen already using one keeps its own reference, so this never pulls a model out from under it."""
+        with self.lock:
+            gone = [n for n in self._loaded if n not in keep]
+            for n in gone:
+                del self._loaded[n]
+        if gone:
+            import gc
+            gc.collect()
+        return gone
 
     def audio(self, path):
         """16 kHz audio of the file, decoded once per job (main model, double-check and waveform share it)."""

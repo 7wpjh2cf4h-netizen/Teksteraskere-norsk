@@ -135,6 +135,7 @@ class Editor {
     this.video.addEventListener("error", () => { this.stageMsg.hidden = false; this.stageMsg.textContent = t("video_unplayable"); });
     this.video.addEventListener("play", () => (this.playBtn.innerHTML = ICON.pause));
     this.video.addEventListener("pause", () => (this.playBtn.innerHTML = ICON.play));
+    for (const ev of ["play", "playing", "seeking", "seeked", "timeupdate", "loadeddata", "ratechange"]) this.video.addEventListener(ev, () => this.wake());
     this.video.addEventListener("loadedmetadata", () => { this.layoutOverlay(); this.drawTimeline(true); });
 
     this.playBtn = h("button", { class: "icon-btn play", type: "button", "aria-label": t("play_pause"), "data-tip": t("tip_play"), onclick: () => this.toggle(), html: ICON.play });
@@ -1039,17 +1040,25 @@ class Editor {
     this.overlay.replaceChildren(...text.split("\n").filter((l) => l.trim()).map((l) => h("span", null, l)));
     this.layoutOverlay();
   }
+  // Runs every frame while the video plays or moves; once it has stood paused and still for ~half a second the
+  // loop sleeps (no work at 60 frames a second while you type), and play / seek / time changes wake it again.
   loop() {
+    this.raf = 0;
     if (!this.alive) return;
     const tm = this.video.currentTime;
     if (this.playUntil != null && tm >= this.playUntil && !this.video.paused) { this.video.pause(); this.playUntil = null; }
     if (tm !== this.lastT || !this.video.paused) {
+      this.still = 0;
       this.lastT = tm;
       this.clock.textContent = `${fmtTC(tm)} / ${fmtTC(this.video.duration || this.meta.duration || 0)}`;
       this.showOverlay(false);
       this.drawTimeline(false);
-    }
-    requestAnimationFrame(() => this.loop());
+    } else if (++this.still > 30) return;
+    this.raf = requestAnimationFrame(() => this.loop());
+  }
+  wake() {
+    this.still = 0;
+    if (this.alive && !this.raf) this.raf = requestAnimationFrame(() => this.loop());
   }
 
   // ================================================================ timeline

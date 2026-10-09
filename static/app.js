@@ -158,6 +158,7 @@ function live(j) {
 
 function tickJobs() {
   if (!S.state) return;
+  if (busyNow() && S.pollAt - Date.now() > 1000) schedulePoll(250);  // a job was just added or started: follow it closely
   for (const j of S.state.jobs) {
     if (!RUNNING.includes(j.status)) { delete SHOWN[j.id]; delete SHOWN[j.id + ":dl"]; continue; }
     if (j.status !== "downloading") delete SHOWN[j.id + ":dl"];
@@ -171,18 +172,39 @@ function tickJobs() {
 }
 setInterval(tickJobs, 250);
 
+// Poll every second while something runs, every 3 s when idle, every 10 s while the window is minimised
+// (the server quits a browser-mode session after 90 s without a poll). An open editor tells the server, which keeps
+// (or loads) the model "Hør på nytt" needs and frees it otherwise.
+function busyNow() {
+  const st = S.state;
+  if (!st) return true;
+  return st.jobs.some((j) => RUNNING.includes(j.status) || (j.status === "queued" && !st.paused) || ["queued", "running"].includes(j.export?.status))
+    || Object.keys(S.dl || {}).length > 0;
+}
+function schedulePoll(ms) {
+  if (S.stopped) return;
+  clearTimeout(S.pollT);
+  S.pollAt = Date.now() + ms;
+  S.pollT = setTimeout(poll, ms);
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") schedulePoll(0); });
+
 async function poll() {
+  clearTimeout(S.pollT);
   try {
-    S.state = await api("GET", "/api/state");
+    const visible = document.visibilityState === "visible";
+    S.state = await api("GET", "/api/state" + (S.editor && visible ? `?editing=${encodeURIComponent(S.editor.id)}` : ""));
     if (S.state.now) S.skew = S.state.now - Date.now() / 1000;
-    S.dl = await api("GET", "/api/downloads");
+    if (route().name === "settings" || Object.keys(S.dl || {}).length) S.dl = await api("GET", "/api/downloads");
     $("#offline").hidden = true;
     applyLang();
     if (route().name === "jobs") updateJobs();
     if (S.editor) S.editor.sync(S.state);
     if (route().name === "settings") updateModels();
+    schedulePoll(document.visibilityState !== "visible" ? 10000 : busyNow() ? 1000 : 3000);
   } catch (e) {
     $("#offline").hidden = false;
+    schedulePoll(1000);
   }
 }
 
@@ -193,8 +215,9 @@ function applyLang() {
     document.documentElement.lang = LANG === "nb" ? "nb" : "en";
     (async () => { if (S.editor) { await S.editor.destroy(); S.editor = null; } render(); })();
   }
-  $$("[data-t]").forEach((el) => (el.textContent = t(el.dataset.t)));
-  $("#lang-toggle").textContent = LANG === "nb" ? "English" : "Norsk";
+  $$("[data-t]").forEach((el) => { const s = t(el.dataset.t); if (el.textContent !== s) el.textContent = s; });
+  const lt = $("#lang-toggle"), ls = LANG === "nb" ? "English" : "Norsk";
+  if (lt.textContent !== ls) lt.textContent = ls;
 }
 
 async function saveSettings(patch) {
@@ -215,7 +238,7 @@ async function render() {
   document.body.classList.toggle("editing", r.name === "edit");
   if (!S.state) return;
   if (r.name === "settings") viewSettings();
-  else if (r.name === "edit") { if (!S.editor) S.editor = new Editor(r.id); }
+  else if (r.name === "edit") { if (!S.editor) { S.editor = new Editor(r.id); schedulePoll(0); } }  // poll now: the server starts loading the model
   else viewJobs();
 }
 window.addEventListener("hashchange", render);
@@ -530,12 +553,12 @@ $("#quit").addEventListener("click", async () => {
   await api("POST", "/api/quit").catch(() => {});
   document.body.replaceChildren(h("main", { class: "page bye" }, h("h1", null, t("bye_title")), h("p", null, t("bye_body"))));
   setTimeout(() => window.close(), 600);  // closes the app window (works in app mode)
-  clearInterval(S.timer);
+  S.stopped = true;
+  clearTimeout(S.pollT);
 });
 window.addEventListener("beforeunload", () => { if (S.editor && S.editor.dirty) S.editor.save(true); });
 
 (async function boot() {
   await poll();
   render();
-  S.timer = setInterval(poll, 1000);
 })();
