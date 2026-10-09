@@ -109,6 +109,18 @@ to time-weighted ranges, measures real speed during decode, sends `rate`/`cap`/`
 - `Store` caches meta.json in memory (all writes go through it): `/api/state` with 60 videos was 71 ms,
   polled every second. Don't edit meta.json by hand while the app runs.
 
+### Queue order (2026-10-09)
+`queue_key` in server.py: shortest *duration* first (not file size: transcription time follows length), unknown
+length last by size. The worker picks with it and `state()` lists jobs in the same order (`list_order`: running,
+queue, then finished in added order), so the first videos can be proofread while long ones run. Verified: the
+editor (with video playing) does not pause the queue; nothing in the UI calls /api/queue except the Pause button.
+
+### Measured but not done (2026-10-09)
+- BatchedInferencePipeline (large, CPU, 6 threads): only ~10 % faster and 5 % of words differ → not worth it.
+- Pickled nb dictionary: loads in 3.8 s instead of 10.1 s, but the file is 98 MB.
+- h264_amf (AMD hardware encoder) works on Jonas's PC: 1.75x faster burn-in encode than libx264 veryfast;
+  quality not checked; on other PCs (Intel/NVIDIA) h264_qsv / h264_nvenc would need the same check.
+
 ### Burn-in cleanup (fixed 2026-10-08)
 `burn.burn` always removes its temp folder and `.part.mp4` (done, cancelled, error). Deleting a project stops
 its transcription *and* burn-in first. Quit calls `burn.abort_all()` (kills ffmpeg; the burn-in resumes on the

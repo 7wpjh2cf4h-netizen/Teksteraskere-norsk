@@ -160,7 +160,8 @@ class Worker(threading.Thread):
 
     def run(self):
         while True:
-            job = None if self.paused else next((m for m in store.all() if m["status"] == "queued"), None)
+            queued = [] if self.paused else [m for m in store.all() if m["status"] == "queued"]
+            job = min(queued, key=queue_key) if queued else None
             if job is None:
                 keep_awake(False)
                 self.wake.wait(2)
@@ -314,8 +315,32 @@ exporter = Exporter()
 
 
 # --------------------------------------------------------------- helpers ---
+RUNNING = ("downloading", "loading", "transcribing", "checking", "finishing")
+
+
+def queue_key(m):
+    """Shortest video first (transcription time follows the length, not the file size), so the first
+    videos are ready to proofread while the long ones are still running. Unknown length: last, by size."""
+    if m.get("duration"):
+        return (0, m["duration"], m["created"])
+    try:
+        size = Path(m["path"]).stat().st_size
+    except OSError:
+        size = float("inf")
+    return (1, size, m["created"])
+
+
+def list_order(jobs):
+    """The list on the Videoer page: the one being transcribed, then the queue in the order it will run,
+    then everything else (finished, errors) in the order it was added."""
+    running = [m for m in jobs if m["status"] in RUNNING]
+    queued = sorted((m for m in jobs if m["status"] == "queued"), key=queue_key)
+    rest = [m for m in jobs if m["status"] not in RUNNING and m["status"] != "queued"]
+    return running + queued + rest
+
+
 def state():
-    jobs = store.all()
+    jobs = list_order(store.all())
     return {"settings": store.settings(), "models": engine.status(), "jobs": jobs,
             "paused": worker.paused, "current": worker.current, "data_dir": str(DATA),
             "glossary": store.glossary(), "now": time.time(), "time_scale": time_scale()}
@@ -822,7 +847,7 @@ def start_services():
     """Everything but the web server: clean up leftovers, restart interrupted jobs, start the workers."""
     store.cleanup()
     for m in store.all():  # jobs that were running when the app closed start again
-        if m["status"] in ("downloading", "loading", "transcribing", "checking", "finishing"):
+        if m["status"] in RUNNING:
             store.update(m["id"], status="queued", progress=0.0, eta=None)
         if (m.get("export") or {}).get("status") == "running":
             store.update(m["id"], export={"status": "queued"})
