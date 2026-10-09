@@ -354,7 +354,7 @@ function exportLine(j) {
   if (x.status === "queued") return h("div", { class: "job-x" }, t("x_queued"));
   if (x.status === "running") return h("div", { class: "job-x" }, t("x_running", { pct: Math.floor((x.progress || 0) * 100) }), " ",
     h("button", { class: "link", type: "button", onclick: async () => { S.state = await api("POST", `/api/projects/${j.id}/burn/cancel`); updateJobs(); } }, t("stop")));
-  if (x.status === "done") return h("div", { class: "job-x ok" }, t("x_done"), " ",
+  if (x.status === "done") return h("div", { class: "job-x ok" }, t("x_saved"), " ",
     h("button", { class: "link", type: "button", onclick: () => api("POST", "/api/open-folder", { path: x.path }) }, t("show_in_folder")));
   if (x.status === "error") return h("div", { class: "job-x bad" }, t("x_error", { msg: x.message || "" }));
   return null;
