@@ -114,9 +114,9 @@ to time-weighted ranges, measures real speed during decode, sends `rate`/`cap`/`
   (~12 s, pure-Python spylls; kept — dropping it would cost 12 s per editor open), rest ~0.1 GB. Window
   (WebView2) ~0.7 GB. Idle with both models loaded the app was ~3.2 GB.
 - Freeing idle models (`Worker.free_idle_models`): empty queue → small freed at once; the main/editor model
-  is kept while a visible editor polls (`/api/state?editing=<pid>`) and freed `TEKSTING_IDLE_FREE` (600 s)
+  is kept while a visible editor polls (`/api/state?editing=<pid>`; also used by "Foreslå tekst") and freed `TEKSTING_IDLE_FREE` (600 s)
   after the last editor/job use. Opening an editor preloads it in the background (`Engine.preload`; other
-  threads pause ≤ 0.2 s during the load), so it is ready before the first "Hør på nytt".
+  threads pause ≤ 0.2 s during the load), so it is ready before the first "Foreslå tekst".
 - Polling: 1 s while anything runs/queues/exports/downloads, 3 s idle, 10 s while the window is hidden
   (must stay < 90 s: the browser-mode watchdog quits after 90 s without a poll). `/api/downloads` only on the
   settings page or during a download. Editor `loop()` sleeps after ~30 still frames while paused; video
@@ -177,13 +177,13 @@ Review mode ("Gå gjennom": jumps only to flagged cues, Enter approves), find/re
 (font, size, colour, box, position — preview overlay matches the burned result), export menu (SRT next to the
 video, download SRT, burn-in video), undo/redo (also for split/merge/delete; toast with "Angre"), flags
 (spelling, reading speed, line length, model disagreement with "Bruk", rescued speech, autofix with "Angre"),
-"Hør på nytt" (re-transcribe one cue), glossary popup when a word is corrected to a similar spelling,
+"Foreslå tekst" (re-transcribe one cue; was called "Hør på nytt" until 2026-10-09, when Jonas asked that "Hør på nytt" instead replays the cue so the proofreader can rehear difficult words: `playCue`, mousedown cancelled so the caret stays in the text), glossary popup when a word is corrected to a similar spelling,
 work timer (counts only active time), pause-on-type, waveform timeline (drag to scroll, wheel scrolls,
 Ctrl+wheel zooms, drag cue edges to retime).
 Keys outside text fields: Space play/pause, ←/→ ±5 s, ↑/↓ previous/next cue, Enter edit, Esc leave field, ? card.
 Everywhere (Alt, never with Ctrl — Ctrl+Alt is AltGr on Norwegian keyboards): Alt+arrows, Alt+G review, Alt+R
 replay, Alt+I/O start/end here (snaps to a word within 0.25 s), Alt+K approve, Alt+S split, Alt+M merge, Alt+W wrap,
-Alt+Backspace delete, Alt+H listen again, Alt+N new cue, Alt+−/Alt++ speed. Ctrl+F find, Ctrl+Z/Y undo/redo.
+Alt+Backspace delete, Alt+H suggest text (model), Alt+N new cue, Alt+−/Alt++ speed. Ctrl+F find, Ctrl+Z/Y undo/redo.
 The list lives in i18n `keys_groups` (nb + en) and is shown as a small card under the timeline (keyboard button or
 ?), open the first time; tooltips name the key too. Hover tooltips only on non-obvious buttons (Jonas's wish).
 

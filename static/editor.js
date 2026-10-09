@@ -435,6 +435,8 @@ class Editor {
         h("button", { class: "btn tiny", type: "button", "data-tip": t("tip_split"), onclick: () => this.split(i) }, t("split")),
         h("button", { class: "btn tiny", type: "button", "data-tip": t("tip_merge"), disabled: i >= this.cues.length - 1, onclick: () => this.merge(i) }, t("merge")),
         h("button", { class: "btn tiny", type: "button", "data-tip": t("tip_pos"), onclick: () => this.togglePos(i) }, c.pos === "top" ? t("pos_bottom") : t("pos_top")),
+        // mousedown is cancelled so the cursor stays in the text while you listen and then type the fix
+        h("button", { class: "btn tiny", type: "button", "data-tip": t("tip_hear_again"), onmousedown: (e) => e.preventDefault(), onclick: () => this.playCue(i) }, t("hear_again")),
         h("button", { class: "btn tiny", type: "button", "data-tip": t("listen_title"), onclick: () => this.listen(i) }, t("listen")),
         h("button", { class: "btn tiny quiet danger-text", type: "button", onclick: () => this.remove(i) }, t("delete")),
         h("span", { class: "grow" }),
