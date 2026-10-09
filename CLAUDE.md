@@ -130,6 +130,22 @@ to time-weighted ranges, measures real speed during decode, sends `rate`/`cap`/`
 header (link back to the list), and a toast "«name» er klar til korrektur" + "Åpne" when a queued video
 finishes. Uses `live()`/`RUNNING` from app.js (classic scripts share globals).
 
+### Editor layout (2026-10-09, Jonas asked for all of these)
+- SRT only by default: setting `burn_tools` (off) hides Stil, Flytt opp, burned-in export and the batch
+  "Lag videoer med tekst"; the header then has one "Lagre SRT" button (save next to the video) and
+  "Last ned SRT" sits in ⋯. With the setting on, everything is back as before.
+- Selected cue: one tool row — "Hør på nytt" (emphasised) | icons for wrap / split / merge / delete
+  (labels in aria-label + tooltip with the shortcut) | undo, Godkjenn. Tool buttons cancel mousedown so the
+  caret stays in the text.
+- Denser cards; approved cues (not selected) shrink to their first line, muted, chips hidden.
+- Chip colours: red = breaks a rule, orange = listen and check (unsure, alternative, recovered, unknown
+  word, silent gap), blue = information (timing advice, automatic fixes). Shorter chip texts.
+- Shortcut card is a popup above the keyboard button (closes on outside click / Esc); the left side no
+  longer scrolls.
+- Spoken-word highlight: `highlightWord` (from `loop()`) marks the word being spoken in the playing cue via a
+  mirror div (`.ta-wrap .hl`) under the transparent textarea; `cueWords`/`tokenFor` map model words to the
+  edited text (same matching as Ctrl+click). The mark stays on the last word when paused, clears on typing.
+
 ### Editor speed with long videos (2026-10-09)
 Test: 60-min fake project (silent `anullsrc` audio, 683 cues), timings via CDP in the real window.
 Typing a key 77 → 23 ms, next cue 72 → 17 ms, open 602 → 252 ms. Causes: `videoBox()` read

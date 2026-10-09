@@ -104,6 +104,7 @@ class Editor {
     this.saveResume(true);
     this.flushWork(true);
     document.removeEventListener("pointerdown", this.onActivity, true);
+    document.removeEventListener("click", this.closeKeys);
     document.removeEventListener("keydown", this.onActivity, true);
     this.alive = false;
     document.removeEventListener("keydown", this.onKey);
@@ -150,6 +151,11 @@ class Editor {
       onclick: () => this.toggleKeys(), html: ICON.keys });
     this.undoBtn = h("button", { class: "icon-btn undo", type: "button", disabled: true, onclick: () => this.undo(), "aria-label": t("undo"), "data-tip": t("tip_undo"), html: ICON.undo });
     this.redoBtn = h("button", { class: "icon-btn undo", type: "button", disabled: true, onclick: () => this.redo(), "aria-label": t("redo"), "data-tip": t("tip_redo"), html: ICON.redo });
+    // the shortcut card opens as a popup above its button, so the left side never needs to scroll
+    this.keysPanel = h("div", { class: "keys-panel", role: "dialog", "aria-label": t("shortcuts"), hidden: true });
+    this.keysPanel.addEventListener("click", (e) => e.stopPropagation());
+    this.closeKeys = (e) => { if (!this.keysPanel.hidden && !this.keysBtn.contains(e.target) && !e.target.closest(".menu")) this.toggleKeys(false); };
+    document.addEventListener("click", this.closeKeys);
     const transport = h("div", { class: "transport" },
       h("button", { class: "icon-btn", type: "button", "aria-label": t("seek_back"), "data-tip": t("tip_back5"), onclick: () => this.seek(this.video.currentTime - 5), html: ICON.rew }),
       this.playBtn,
@@ -157,7 +163,7 @@ class Editor {
       this.clock, speed,
       h("span", { class: "grow" }),
       h("button", { class: "btn small quiet", type: "button", "data-tip": t("tip_new_cue"), onclick: () => this.insertAtPlayhead() }, t("new_cue_here")),
-      this.undoBtn, this.redoBtn, this.keysBtn);
+      this.undoBtn, this.redoBtn, h("div", { class: "keys-wrap" }, this.keysBtn, this.keysPanel));
 
     this.wave = h("canvas", { class: "wave", "aria-hidden": "true" });
     this.tlLayer = h("div", { class: "tl-layer" });
@@ -171,15 +177,20 @@ class Editor {
     this.workEl = h("span", { class: "workclock" });
     this.reviewBtn = h("button", { class: "btn small primary", type: "button", onclick: () => this.startReview(), "data-tip": t("tip_review") });
     this.exportState = h("span", { class: "exportstate", "aria-live": "polite" });
-    const exportMenu = this.menu(t("export"), [
-      [t("download_srt"), () => this.download(), t("tip_download_srt")],
-      [t("save_next_to_video"), () => this.saveNextToVideo(), t("tip_save_srt")],
-      [t("burn_video"), () => this.burn(), t("tip_burn")],
-    ], "btn small");
+    // SRT only (the default): one "Lagre SRT" button; Stil, Flytt opp and burned-in video only with the setting on
+    this.burnTools = !!(S.state && S.state.settings.burn_tools);
+    const exportBtn = this.burnTools
+      ? this.menu(t("export"), [
+        [t("download_srt"), () => this.download(), t("tip_download_srt")],
+        [t("save_next_to_video"), () => this.saveNextToVideo(), t("tip_save_srt")],
+        [t("burn_video"), () => this.burn(), t("tip_burn")],
+      ], "btn small")
+      : h("button", { class: "btn small", type: "button", "data-tip": t("tip_save_srt"), onclick: () => this.saveNextToVideo() }, t("save_srt"));
     const moreMenu = this.menu("⋯", [
+      this.burnTools ? null : [t("download_srt"), () => this.download(), t("tip_download_srt")],
       [t("shortcuts"), () => this.toggleKeys()],
       [t("resegment"), () => this.resegment(), t("tip_resegment")],
-    ], "btn small quiet", t("more"));
+    ].filter(Boolean), "btn small quiet", t("more"));
     // the rest of the queue keeps transcribing while you proofread: show how far it is
     this.queueEl = h("a", { class: "ed-queue", href: "#/", hidden: true, "data-tip": t("tip_queue") });
     const head = h("div", { class: "ed-head" },
@@ -189,15 +200,14 @@ class Editor {
       h("div", { class: "ed-actions" },
         this.reviewBtn,
         h("button", { class: "btn small", type: "button", onclick: () => this.togglePanel("find"), "data-tip": t("tip_find") }, t("find_replace")),
-        h("button", { class: "btn small", type: "button", "data-tip": t("tip_style"), onclick: () => this.togglePanel("style") }, t("style")),
-        exportMenu, moreMenu));
+        this.burnTools ? h("button", { class: "btn small", type: "button", "data-tip": t("tip_style"), onclick: () => this.togglePanel("style") }, t("style")) : null,
+        exportBtn, moreMenu));
 
     // right column
     this.reviewBar = h("div", { class: "reviewbar", hidden: true });
     this.panelBox = h("div", { class: "panelbox" });
     this.list = h("div", { class: "cuelist", role: "list" });
-    this.keysPanel = h("div", { class: "keys-panel", hidden: true });
-    const left = h("div", { class: "ed-left" }, this.stage, transport, this.tl, this.keysPanel);
+    const left = h("div", { class: "ed-left" }, this.stage, transport, this.tl);
     this.progEl = h("div", { class: "progress-line" }, h("span", { class: "pl-text" }), h("span", { class: "pl-bar" }, h("i")));
     const right = h("div", { class: "ed-right" }, this.reviewBar, this.panelBox, this.progEl, this.list);
     v.replaceChildren(head, h("div", { class: "ed-body" }, left, right));
@@ -274,11 +284,11 @@ class Editor {
     if (longest > R.max_chars) out.push(["bad", t("f_long", { n: longest, max: R.max_chars })]);
     const nx = this.cues[i + 1];
     if (nx && c.end > nx.start + 0.001) out.push(["bad", t("f_overlap")]);
-    if (dur > 0 && chars / dur > R.max_cps + 0.5) out.push(["warn", t("f_fast", { n: num(chars / dur, 0) })]);
-    if (dur < R.min_dur - 0.01) out.push(["warn", t("f_short")]);
-    if (dur > R.max_dur + 0.01) out.push(["warn", t("f_slow")]);
+    if (dur > 0 && chars / dur > R.max_cps + 0.5) out.push(["info", t("f_fast", { n: num(chars / dur, 0) })]);
+    if (dur < R.min_dur - 0.01) out.push(["info", t("f_short")]);
+    if (dur > R.max_dur + 0.01) out.push(["info", t("f_slow")]);
     const pv = this.cues[i - 1];
-    if (pv && c.start - pv.end > 3.3) out.push(["info", t("f_gap", { n: num(c.start - pv.end, 0) })]);
+    if (pv && c.start - pv.end > 3.3) out.push(["warn", t("f_gap", { n: num(c.start - pv.end, 0) })]);
     if (this.rescued.some((r) => r.s < c.end && r.e > c.start)) out.push(["warn", t("f_rescued")]);
     return out;
   }
@@ -326,18 +336,21 @@ class Editor {
   row(i) {
     const ta = h("textarea", { rows: 2, spellcheck: "false" });
     ta.value = this.cues[i].text;
+    const hl = h("div", { class: "hl", "aria-hidden": "true" });
     const el = h("div", { class: "cue", role: "listitem" },
       h("div", { class: "cue-gutter", onclick: () => this.select(+el.dataset.i, { focus: true }) },
         h("span", { class: "num" }), h("span", { class: "time" })),
-      h("div", { class: "cue-body" }, ta, h("div", { class: "issues" }), h("div", { class: "tools" })),
+      h("div", { class: "cue-body" }, h("div", { class: "ta-wrap" }, hl, ta), h("div", { class: "issues" }), h("div", { class: "tools" })),
       h("span", { class: "okmark", title: t("checked"), "aria-hidden": "true" }));
     el._ta = ta;
+    el._hl = hl;
     ta.addEventListener("focus", () => { el._orig = ta.value; if (this.sel !== +el.dataset.i) this.select(+el.dataset.i, { focus: false, scroll: false }); });
     ta.addEventListener("blur", () => { if (el._orig != null && el._orig !== ta.value) this.offerGlossary(el._orig, ta.value); el._orig = null; });
     ta.addEventListener("input", () => {
       const k = +el.dataset.i;
       if (this.pauseOnType && !this.video.paused) { this.video.pause(); this.playUntil = null; }
       this.cues[k].text = ta.value;
+      if (this.hlEl === el) this.clearHighlight();
       this.cues[k].checked = false;
       this.caret = ta.selectionStart;
       this.refreshRow(k);
@@ -422,19 +435,23 @@ class Editor {
       inp.dataset.k = key;
       return inp;
     };
+    const tool = (icon, label, tip, fn, disabled = false, cls = "") => h("button", { class: "icon-btn tiny tool" + cls, type: "button",
+      "aria-label": label, "data-tip": tip, disabled, onmousedown: (e) => e.preventDefault(), onclick: fn, html: icon });
     $(".tools", el).replaceChildren(
       h("div", { class: "trow" },
         timeField("start"), h("span", { class: "muted" }, "–"), timeField("end"),
         h("button", { class: "link small", type: "button", "data-tip": t("tip_start_here"), onclick: () => this.setTimeHere(i, "start") }, t("start_here")),
         h("button", { class: "link small", type: "button", "data-tip": t("tip_end_here"), onclick: () => this.setTimeHere(i, "end") }, t("end_here"))),
-      h("div", { class: "trow" },
-        h("button", { class: "btn tiny", type: "button", "data-tip": t("tip_wrap"), onclick: () => this.wrap(i) }, t("wrap")),
-        h("button", { class: "btn tiny", type: "button", "data-tip": t("tip_split"), onclick: () => this.split(i) }, t("split")),
-        h("button", { class: "btn tiny", type: "button", "data-tip": t("tip_merge"), disabled: i >= this.cues.length - 1, onclick: () => this.merge(i) }, t("merge")),
-        h("button", { class: "btn tiny", type: "button", "data-tip": t("tip_pos"), onclick: () => this.togglePos(i) }, c.pos === "top" ? t("pos_bottom") : t("pos_top")),
+      h("div", { class: "trow tools-row" },
         // mousedown is cancelled so the cursor stays in the text while you listen and then type the fix
-        h("button", { class: "btn tiny", type: "button", "data-tip": t("tip_hear_again"), onmousedown: (e) => e.preventDefault(), onclick: () => this.playCue(i) }, t("hear_again")),
-        h("button", { class: "btn tiny quiet danger-text", type: "button", onclick: () => this.remove(i) }, t("delete")),
+        h("button", { class: "btn tiny hear", type: "button", "data-tip": t("tip_hear_again"), onmousedown: (e) => e.preventDefault(), onclick: () => this.playCue(i),
+          html: ICON.ear + `<span>${t("hear_again")}</span>` }),
+        h("span", { class: "tsep", "aria-hidden": "true" }),
+        tool(ICON.wrap, t("wrap"), t("tip_wrap"), () => this.wrap(i)),
+        tool(ICON.split, t("split"), t("tip_split"), () => this.split(i)),
+        tool(ICON.merge, t("merge"), t("tip_merge"), () => this.merge(i), i >= this.cues.length - 1),
+        this.burnTools ? h("button", { class: "btn tiny", type: "button", "data-tip": t("tip_pos"), onclick: () => this.togglePos(i) }, c.pos === "top" ? t("pos_bottom") : t("pos_top")) : null,
+        tool(ICON.trash, t("delete"), t("tip_delete"), () => this.remove(i), false, " danger"),
         h("span", { class: "grow" }),
         h("button", { class: "icon-btn tiny undo-inline", type: "button", "aria-label": t("undo"), "data-tip": t("tip_undo"), disabled: !this.hist.length, onclick: () => this.undo(), html: ICON.undo }),
         h("button", { class: "btn tiny " + (c.checked ? "" : "approve"), type: "button", "data-tip": t("tip_approve"), onclick: () => this.approve(i) }, c.checked ? t("uncheck") : t("approve"))));
@@ -776,16 +793,65 @@ class Editor {
     this.video.currentTime = Math.max(0, c.start - 0.25);
     this.video.play().catch(() => {});
   }
+  // The model's words inside subtitle i and the words of its (possibly edited) text. tokenFor() says which text
+  // word model word j is: same spelling nearest the same position, otherwise by its share of the line.
+  cueWords(i) {
+    const c = this.cues[i];
+    const ws = (this.words || []).filter((w) => (w.s + w.e) / 2 >= c.start - 0.05 && (w.s + w.e) / 2 < c.end + 0.05);
+    const toks = [...c.text.matchAll(/[\p{L}\p{N}'’-]+/gu)];
+    return { c, ws, toks };
+  }
+  tokenFor({ ws, toks }, j) {
+    if (!toks.length || !ws.length) return -1;
+    const share = ws.length > 1 ? j / (ws.length - 1) : 0;
+    const want = norm(ws[j].w);
+    let best = null;
+    toks.forEach((m, k) => {
+      if (norm(m[0]) !== want) return;
+      const d = Math.abs((toks.length > 1 ? k / (toks.length - 1) : 0) - share);
+      if (!best || d < best[1]) best = [k, d];
+    });
+    return best ? best[0] : Math.round(share * (toks.length - 1));
+  }
+  // While playing, the word being spoken in the playing subtitle gets a soft yellow mark behind the text
+  // (a mirror div under the transparent textarea). The last word stays marked when you pause.
+  highlightWord(tm) {
+    const i = this.active;
+    let key = "";
+    if (i >= 0) {
+      const cw = this.cueWords(i);
+      let j = -1;
+      for (let k = 0; k < cw.ws.length && cw.ws[k].s <= tm; k++) j = k;
+      const k = j >= 0 && tm <= cw.ws[j].e + 0.25 ? this.tokenFor(cw, j) : -1;
+      if (k >= 0) {
+        key = `${i}:${k}:${cw.c.text}`;
+        const el = this.list.children[i];
+        if (key !== this.hlKey && el && el._hl) {
+          this.clearHighlight();
+          const m = cw.toks[k], text = cw.c.text;
+          const esc = (s) => s.replace(/[&<>]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[ch]);
+          el._hl.innerHTML = esc(text.slice(0, m.index)) + "<mark>" + esc(m[0]) + "</mark>" + esc(text.slice(m.index + m[0].length)) + " ";
+          this.hlEl = el;
+        }
+      }
+    }
+    if (key) this.hlKey = key;
+    else if (this.hlKey && !this.video.paused) this.clearHighlight();
+  }
+  clearHighlight() {
+    if (this.hlEl) this.hlEl._hl.textContent = "";
+    this.hlEl = null;
+    this.hlKey = "";
+  }
   // Ctrl+click on a word: play just that word with half a second around it. The text may have been edited, so the
   // clicked word is matched to the model's words in this subtitle by spelling and position (or by its share of the line).
   hearAt(i, pos) {
     const c = this.cues[i];
     if (!c) return;
-    const text = c.text, toks = [...text.matchAll(/[\p{L}\p{N}'’-]+/gu)];
+    const text = c.text, { ws, toks } = this.cueWords(i);
     if (!toks.length) return;
     let k = toks.findIndex((m) => pos >= m.index && pos <= m.index + m[0].length);
     if (k < 0) k = Math.max(0, toks.filter((m) => m.index < pos).length - 1);
-    const ws = (this.words || []).filter((w) => (w.s + w.e) / 2 >= c.start - 0.05 && (w.s + w.e) / 2 < c.end + 0.05);
     const share = toks.length > 1 ? k / (toks.length - 1) : 0;
     let s, e;
     if (ws.length) {
@@ -1060,6 +1126,7 @@ class Editor {
       this.clock.textContent = `${fmtTC(tm)} / ${fmtTC(this.video.duration || this.meta.duration || 0)}`;
       this.showOverlay(false);
       this.drawTimeline(false);
+      this.highlightWord(tm);
     } else if (++this.still > 30) return;
     this.raf = requestAnimationFrame(() => this.loop());
   }
@@ -1303,6 +1370,7 @@ class Editor {
     if (ctrl && !e.shiftKey && e.code === "KeyZ" && !typing) { e.preventDefault(); this.undo(); return; }
     if (ctrl && (e.code === "KeyY" || (e.shiftKey && e.code === "KeyZ")) && !typing) { e.preventDefault(); this.redo(); return; }
     if (e.key === "Escape") {
+      if (!this.keysPanel.hidden) { this.toggleKeys(false); return; }
       if (tag === "TEXTAREA") { e.target.blur(); return; }  // first Esc: leave the text field so plain keys work
       if (this.review) this.stopReview(); else if (this.panel) this.closePanel();
       return;

@@ -600,3 +600,44 @@ body { font-size: 15px; }
 
 /* a very long "word" (pasted URL, held key) must wrap inside its chip, not stretch the subtitle box */
 .chip { max-width: 100%; overflow-wrap: anywhere; word-break: break-word; }
+
+/* ---- editor cleanup (2026-10-09) ---- */
+/* shortcut card: a popup above the keyboard button instead of a block under the timeline */
+.keys-wrap { position: relative; display: inline-flex; }
+.keys-panel { position: absolute; right: 0; bottom: calc(100% + 10px); z-index: 30; width: min(620px, 80vw); margin-top: 0;
+  max-height: 70vh; overflow: auto; box-shadow: 0 14px 34px rgba(0, 0, 0, 0.3); text-align: left; }
+
+/* selected subtitle: one tool row, "Hør på nytt" first, rare tools as icons */
+.tools-row { gap: 4px; flex-wrap: nowrap; }
+.btn.tiny.hear { display: inline-flex; align-items: center; gap: 6px; font-weight: 600;
+  background: var(--brand-soft); color: var(--brand); border-color: transparent; }
+.btn.tiny.hear:hover { background: color-mix(in srgb, var(--brand) 20%, var(--panel)); }
+.tsep { width: 1px; height: 18px; background: var(--line); margin: 0 5px; flex: none; }
+.icon-btn.tiny.tool { width: 30px; height: 28px; color: var(--muted); border-color: var(--line-soft); }
+.icon-btn.tiny.tool:hover:not(:disabled) { color: var(--ink); border-color: var(--line); }
+.icon-btn.tiny.tool.danger:hover:not(:disabled) { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, transparent); }
+.icon-btn.tiny.tool:disabled { opacity: 0.4; cursor: default; }
+
+/* denser list; approved subtitles shrink to one muted line until selected */
+.cue { margin: 4px 0; padding-top: 4px; padding-bottom: 4px; }
+.cue.checked:not(.sel) textarea { min-height: 0; max-height: calc(1lh + 10px); color: var(--muted); }
+.cue.checked:not(.sel) .issues { display: none; }
+.cue.checked:not(.sel) .cue-gutter .time { display: none; }
+
+/* one colour rule for the chips: red = breaks a rule, orange = listen and check, blue = for information */
+.chip.alt, .chip.unsure { background: var(--warn-soft); color: var(--warn); }
+.chip.auto { background: var(--info-soft); color: var(--info); }
+
+/* the word being spoken, marked behind the text (mirror div under a transparent textarea) */
+.ta-wrap { position: relative; border-radius: 6px; }
+.ta-wrap .hl { position: absolute; inset: 0; padding: 4px 6px; border: 1px solid transparent; font: 16px/1.45 var(--font);
+  white-space: pre-wrap; overflow-wrap: break-word; color: transparent; pointer-events: none; overflow: hidden; }
+.ta-wrap .hl:empty { display: none; }
+.ta-wrap .hl mark { color: transparent; border-radius: 3px; background: color-mix(in srgb, var(--cue) 60%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--cue) 60%, transparent); }
+.cue .ta-wrap textarea, .cue .ta-wrap textarea:focus { position: relative; z-index: 1; background: transparent; }
+.cue .ta-wrap:focus-within { background: var(--panel); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .ta-wrap .hl mark { background: color-mix(in srgb, var(--cue) 38%, transparent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--cue) 38%, transparent); }
+}

@@ -20,6 +20,11 @@ function h(tag, attrs, ...kids) {
   return el;
 }
 const ICON = {
+  ear: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z" fill="currentColor"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  wrap: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 6h16M4 12h12.5a3 3 0 0 1 0 6H12m2-2.5L11.5 18l2.5 2.5M4 18h4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  split: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 4v16M4 8v8M20 8v8M7 12H4m13 0h3" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  merge: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 7v10M20 7v10M7 12h10m-3-3 3 3-3 3m-4-6-3 3 3 3" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12M10.5 11v5M13.5 11v5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   keys: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="3" y="6.5" width="18" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M7 10h.01M10.5 10h.01M14 10h.01M17 10h.01M8 14h8" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>',
   play: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></svg>',
   pause: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" fill="currentColor"/></svg>',
@@ -432,14 +437,16 @@ function updateJobs() {
   const bb = $("#batchbar");
   const nDone = jobs.filter((j) => j.status === "done").length;
   bb.hidden = nDone < 1;
+  const burnOn = !!S.state.settings.burn_tools;
+  if (bb.dataset.burn !== String(burnOn)) { bb.replaceChildren(); bb.dataset.burn = String(burnOn); }
   if (nDone && !bb.childElementCount) {
-    bb.append(h("span", { class: "muted" }, t("batch_label")),
+    bb.append(...[h("span", { class: "muted" }, t("batch_label")),
       h("button", { class: "btn small", type: "button", "data-tip": t("tip_batch_srt"), onclick: async () => {
         const r = await api("POST", "/api/export-all", { kind: "srt" }); S.state = r;
         toast(t(r.count === 1 ? "batch_srt_done_1" : "batch_srt_done", { n: r.count }));
         if (r.failed && r.failed.length) toast(t("batch_srt_failed", { names: r.failed.map((f) => f.name).join(", ") }), null, 12000); } }, t("batch_srt")),
-      h("button", { class: "btn small", type: "button", "data-tip": t("tip_batch_burn"), onclick: async () => {
-        const r = await api("POST", "/api/export-all", { kind: "burn" }); S.state = r; toast(t("batch_burn_done", { n: r.count })); updateJobs(); } }, t("batch_burn")));
+      !burnOn ? null : h("button", { class: "btn small", type: "button", "data-tip": t("tip_batch_burn"), onclick: async () => {
+        const r = await api("POST", "/api/export-all", { kind: "burn" }); S.state = r; toast(t("batch_burn_done", { n: r.count })); updateJobs(); } }, t("batch_burn"))].filter(Boolean));
   }
 }
 
@@ -459,7 +466,7 @@ function viewSettings() {
     for (const k of ["max_chars", "max_cps", "min_dur", "max_dur"]) rules[k] = Number(f.get(k));
     await saveSettings({ glossary: f.get("glossary"), hotwords: f.get("hotwords") === "on",
       collapse_repeats: f.get("collapse_repeats") === "on", double_check: f.get("double_check") === "on",
-      pause_on_type: f.get("pause_on_type") === "on", rules });
+      pause_on_type: f.get("pause_on_type") === "on", burn_tools: f.get("burn_tools") === "on", rules });
     toast(t("settings_saved"));
   } },
     h("section", null,
@@ -483,7 +490,8 @@ function viewSettings() {
     h("section", null,
       h("h2", null, t("workflow")),
       h("label", { class: "check" }, h("input", { type: "checkbox", name: "double_check", checked: st.double_check }), h("span", null, t("double_check"))),
-      h("label", { class: "check" }, h("input", { type: "checkbox", name: "pause_on_type", checked: st.pause_on_type }), h("span", null, t("pause_on_type")))),
+      h("label", { class: "check" }, h("input", { type: "checkbox", name: "pause_on_type", checked: st.pause_on_type }), h("span", null, t("pause_on_type"))),
+      h("label", { class: "check" }, h("input", { type: "checkbox", name: "burn_tools", checked: st.burn_tools }), h("span", null, t("burn_tools")))),
     h("div", { class: "form-actions" }, h("button", { class: "btn primary", type: "submit" }, t("save_settings"))));
   v.replaceChildren(
     h("section", { class: "intro" }, h("h1", null, t("settings_title"))),
