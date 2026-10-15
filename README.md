@@ -3,8 +3,9 @@
 **Norwegian subtitles for video, transcribed and proofread on your own Windows PC.**
 
 A friend of mine subtitles corporate videos for a company's website. He had a cumbersome workflow in Adobe
-Premiere Pro, which didnt have a good transcription AI for norwegian language. Teksting writes the first draft with a speech model based on whisper train by Norways National Library, and gives him an editor built only for
-checking it. The goal is under 3 minutes of human work per minute of video, and to beat that by a wide margin.
+Premiere Pro, which didn't have good AI transcription for Norwegian. Teksting writes the first draft with a
+speech model based on Whisper, trained by the National Library of Norway, and gives him an editor built only
+for checking it. The goal is under 3 minutes of human work per minute of video, and to beat that by a wide margin.
 
 Everything runs locally. No video or audio leaves the machine, and no cloud service is involved.
 
