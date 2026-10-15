@@ -5,8 +5,8 @@ plus an editor to proofread them against the video. Built in a claude.ai session
 Claude Code on Jonas's PC on 2026-10-08. Read this fully before changing anything.
 
 ## The people and the goal
-- **Jonas** (owner, builds this with Claude). Not a programmer: explain commands, prefer doing over telling,
-  keep answers concise, challenge his ideas rather than agreeing, and use Socratic questions when he is learning.
+- **Jonas** (owner; product decisions, requirements and testing; builds this with Claude Code). Explain technical
+  steps and commands plainly, prefer doing over telling, keep answers concise, challenge his ideas rather than agreeing, and use Socratic questions when he is learning.
 - **End user**: a friend who subtitles corporate videos for a big company's website. Today he downloads videos
   from Vimeo, writes captions in Adobe Premiere Pro, and delivers **SRT** files (confirmed by Jonas 2026-10-09: no CSV needed).
 - **Goal**: under 6 min of human work per 1 min of video (Jonas: "we should beat that by a lot").

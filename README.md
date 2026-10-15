@@ -132,3 +132,7 @@ Useful environment variables:
 
 - Speech models: [NB-Whisper](https://huggingface.co/NbAiLab) by the National Library of Norway (Apache 2.0).
 - Spell checking: the Norwegian dictionaries from [LibreOffice](https://github.com/LibreOffice/dictionaries).
+
+## License
+
+[MIT](LICENSE)
