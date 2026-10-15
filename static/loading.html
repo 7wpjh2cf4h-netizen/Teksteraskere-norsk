@@ -93,9 +93,10 @@
     setTimeout(function () { k.classList.remove("down"); }, 90);
   }
   // Timeline from when the screen appears: first key at FIRST_MS, last key at DONE_MS,
-  // fade starts at SHOW_MS - FADE_MS (2.7 s) and the app shows at SHOW_MS (3.0 s), or later if it is not ready.
+  // fade starts at SHOW_MS - FADE_MS (1.3 s) and the app shows at SHOW_MS (1.55 s), or later if it is not ready.
+  // (Was 3.0 s; the server is usually ready ~0.4 s after this screen appears, so the rest was pure waiting.)
   // The server boots in parallel the whole time (tekst/launch.py); this only decides when the app is shown.
-  var FIRST_MS = 100, DONE_MS = 2100, SHOW_MS = 3000, FADE_MS = 300;
+  var FIRST_MS = 100, DONE_MS = 1250, SHOW_MS = 1550, FADE_MS = 250;
   var TYPE_MS = DONE_MS - FIRST_MS;
   function gaps() {    // uneven, hand-typed rhythm that still adds up to exactly TYPE_MS
     var w = [], sum = 0;

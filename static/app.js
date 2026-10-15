@@ -182,7 +182,7 @@ setInterval(tickJobs, 250);
 function busyNow() {
   const st = S.state;
   if (!st) return true;
-  return st.jobs.some((j) => RUNNING.includes(j.status) || (j.status === "queued" && !st.paused) || ["queued", "running"].includes(j.export?.status))
+  return st.jobs.some((j) => RUNNING.includes(j.status) || j.checking || (j.status === "queued" && !st.paused) || ["queued", "running"].includes(j.export?.status))
     || Object.keys(S.dl || {}).length > 0;
 }
 function schedulePoll(ms) {
@@ -298,6 +298,13 @@ function jobEstimate(j) {
   const check = S.state.settings.double_check && j.model !== "small" ? sm.speed : 0;
   return j.duration * (m.speed + check) * (S.state.time_scale || 1);
 }
+// Seconds of double-check still ahead for a job (it runs after the video is ready to proofread).
+function checkLeft(j) {
+  const sm = S.state.models.small;
+  if (!j.duration || !sm) return 0;
+  if (j.checking) return (1 - (j.check || 0)) * j.duration * sm.speed * (S.state.time_scale || 1);
+  return RUNNING.includes(j.status) && j.double ? j.duration * sm.speed * (S.state.time_scale || 1) : 0;
+}
 
 function statusText(j) {
   const m = S.state.models[j.model];
@@ -318,7 +325,7 @@ function statusText(j) {
       const left = eta == null ? "" : eta < 15 ? " " + t("st_soon") : " " + t("st_left", { d: fmtDur(eta) });
       return t("st_" + j.status, { pct: Math.floor(p * 100) }) + ph + left;
     }
-    case "done": return t("st_done", { n: j.cues }) + (j.disagree ? " " + t("st_disagree", { n: j.disagree }) : "") + (j.rescued ? " " + t("st_rescued", { n: j.rescued }) : "") + (j.edited ? " " + t("st_edited") : "");
+    case "done": return t("st_done", { n: j.cues }) + (j.checking ? " " + t("st_checking_bg", { pct: Math.floor((j.check || 0) * 100) }) : "") + (j.disagree ? " " + t("st_disagree", { n: j.disagree }) : "") + (j.rescued ? " " + t("st_rescued", { n: j.rescued }) : "") + (j.edited ? " " + t("st_edited") : "");
     case "error":
       if (j.error_kind === "download") return t("err_download", { msg: j.message || "" });
       if (j.error_kind === "missing") return t("err_missing");
@@ -400,7 +407,7 @@ function updateJobs() {
   } else {
     const keep = new Map($$(".job", list).map((el) => [el.dataset.id, el]));
     const rows = jobs.map((j) => {
-      const sig = JSON.stringify([Math.round((j.work_seconds || 0) / 30), j.edit_rate, j.autofixed, j.export, j.status, j.status === "downloading" ? Math.floor((j.progress || 0) * 200) : 0, j.cues, j.edited, j.message, LANG, S.armed && S.armed.id === j.id && S.armed.until > Date.now(), S.state.models[j.model]?.ready]);
+      const sig = JSON.stringify([Math.round((j.work_seconds || 0) / 30), j.edit_rate, j.autofixed, j.export, j.status, j.status === "downloading" ? Math.floor((j.progress || 0) * 200) : 0, j.cues, j.edited, j.message, j.checking && Math.floor((j.check || 0) * 100), j.disagree, LANG, S.armed && S.armed.id === j.id && S.armed.until > Date.now(), S.state.models[j.model]?.ready]);
       const old = keep.get(j.id);
       if (old && old.dataset.sig === sig) return old;
       const row = jobRow(j);
@@ -411,9 +418,10 @@ function updateJobs() {
   }
   // queue line
   const q = $("#queueline");
-  const cur = jobs.find((j) => RUNNING.includes(j.status));
+  const cur = jobs.find((j) => RUNNING.includes(j.status)) || jobs.find((j) => j.checking);
   const waiting = jobs.filter((j) => j.status === "queued");
-  const waitTime = waiting.reduce((a, j) => a + (jobEstimate(j) || 0), 0) + (cur ? (live(cur).eta ?? jobEstimate(cur) ?? 0) : 0);
+  const waitTime = waiting.reduce((a, j) => a + (jobEstimate(j) || 0), 0)
+    + (cur ? (cur.status === "done" ? 0 : live(cur).eta ?? jobEstimate(cur) ?? 0) + checkLeft(cur) : 0);
   const parts = [];
   if (S.state.paused) parts.push(h("span", null, t("q_paused")));
   else if (cur) parts.push(h("span", null, t("q_working", { name: cur.name })), waitTime ? h("span", null, " " + t("q_total", { d: fmtDur(waitTime) })) : null, h("span", { class: "muted" }, " " + t("q_awake")));

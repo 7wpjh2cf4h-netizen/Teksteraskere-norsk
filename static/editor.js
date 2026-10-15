@@ -50,6 +50,8 @@ class Editor {
     this.style = { ...d.style };
     this.pauseOnType = d.pause_on_type;
     this.disagree = d.disagree || [];
+    this.hintsV = 0;
+    this.checking = !!d.meta.checking;  // the double-check still runs: its hints arrive later (sync -> loadHints)
     this.rescued = d.rescued || [];
     this.autofix = d.autofix || [];
     this.workBase = d.meta.work_seconds || 0;
@@ -234,8 +236,10 @@ class Editor {
     if (!this.queueEl) return;
     const cur = st.jobs.find((j) => RUNNING.includes(j.status) && j.id !== this.id);
     const waiting = st.jobs.filter((j) => j.status === "queued").length;
+    const me = st.jobs.find((j) => j.id === this.id);
     let text = "";
-    if (cur) {
+    if (me && me.checking) text = t("eq_checking", { pct: Math.floor((me.check || 0) * 100) });
+    else if (cur) {
       const pct = Math.floor(live(cur).p * 100);
       text = cur.status === "downloading" ? t("eq_downloading", { pct }) : t("eq_working", { name: cur.name, pct });
       if (waiting) text += " · " + t("eq_more", { n: waiting });
@@ -252,6 +256,9 @@ class Editor {
 
   sync(st) {
     if (!st) return;
+    const me = st.jobs.find((j) => j.id === this.id);
+    if (me && me.checking) this.checking = true;
+    else if (this.checking && this.list) { this.checking = false; if (me && me.status === "done") this.loadHints(); }
     this.syncQueue(st);
     if (!this.exportState) return;
     const m = st.jobs.find((j) => j.id === this.id);
@@ -266,6 +273,19 @@ class Editor {
       this.exportState.append(h("button", { class: "link", type: "button", onclick: () => api("POST", "/api/open-folder", { path: x.path }) }, t("x_done")));
     } else if (x.status === "error") this.exportState.append(h("span", { class: "bad" }, t("x_error", { msg: x.message || "" })));
     this.lastExportAt = x.at || null;
+  }
+
+  // The double-check finished while this video was open: show its hints without touching the text.
+  async loadHints() {
+    let d;
+    try { d = await api("GET", "/api/projects/" + this.id); } catch (e) { return; }
+    if (!this.alive) return;
+    this.disagree = d.disagree || [];
+    this.hintsV++;
+    for (let i = 0; i < this.cues.length; i++) if (this.list.children[i]) this.fillRow(this.list.children[i], i);
+    this.updateCounts();
+    this.drawTimeline(true);
+    toast(this.disagree.length ? t("check_done", { n: this.disagree.length }) : t("check_none"));
   }
 
   // ================================================================= analysis
@@ -475,7 +495,7 @@ class Editor {
 
   // =============================================================== operations
   snapshot() {
-    this.hist.push(JSON.stringify({ cues: this.cues, disagree: this.disagree, sel: this.sel }));
+    this.hist.push(JSON.stringify({ cues: this.cues, disagree: this.disagree, hv: this.hintsV, sel: this.sel }));
     if (this.hist.length > 200) this.hist.shift();
     this.future = [];
     this.updateUndo();
@@ -489,7 +509,7 @@ class Editor {
   restore(s) {
     const o = JSON.parse(s);
     this.cues = o.cues;
-    this.disagree = o.disagree;
+    if (o.hv === this.hintsV) this.disagree = o.disagree;  // hints that arrived later stay (undo is for your edits)
     this.spellAll();
     this.renderList();
     const i = Math.min(Math.max(o.sel ?? this.sel, 0), this.cues.length - 1);
@@ -499,7 +519,7 @@ class Editor {
   undo() {
     const s = this.hist.pop();
     if (!s) { toast(t("nothing_to_undo")); return; }
-    this.future.push(JSON.stringify({ cues: this.cues, disagree: this.disagree, sel: this.sel }));
+    this.future.push(JSON.stringify({ cues: this.cues, disagree: this.disagree, hv: this.hintsV, sel: this.sel }));
     this.restore(s);
     this.updateUndo();
     toast(t("undone"), { label: t("redo"), run: () => this.redo() });
@@ -507,7 +527,7 @@ class Editor {
   redo() {
     const s = this.future.pop();
     if (!s) return;
-    this.hist.push(JSON.stringify({ cues: this.cues, disagree: this.disagree, sel: this.sel }));
+    this.hist.push(JSON.stringify({ cues: this.cues, disagree: this.disagree, hv: this.hintsV, sel: this.sel }));
     this.restore(s);
     this.updateUndo();
   }

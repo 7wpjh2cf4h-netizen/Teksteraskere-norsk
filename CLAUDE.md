@@ -73,8 +73,8 @@ WebView2 is built into Windows) owns the main thread and opens at once with `sta
 imports `server` and runs uvicorn beside it (`serve_in_background`). The loading page (a small typewriter
 typing "Teksting" with a yellow subtitle bar, app tokens, light/dark) pings `/api/ping` (fetch no-cors) and
 switches to the app itself; once ready it finishes the word fast (no waiting on the animation).
-Fixed timeline (Jonas's choice, constants at the top of the script): "Raskere teksting" (was "Jonas er best" until 2026-10-09) fully typed at 2.1 s
-(DONE_MS), fade 2.7–3.0 s (SHOW_MS, FADE_MS) after the real window shows, later only if the server isn't ready. A "Hail the
+Fixed timeline (Jonas's choice, constants at the top of the script): "Raskere teksting" (was "Jonas er best" until 2026-10-09) fully typed at
+(DONE_MS; 1.25 s since 2026-10-15), fade 1.3–1.55 s (SHOW_MS, FADE_MS; was 2.7–3.0 s until 2026-10-15) after the real window shows, later only if the server isn't ready. A "Hail the
 king" intro with Jonas's face was built and dropped on 2026-10-09 — he chose minimal and classy instead.
 `Teksting.vbs` skips the uv package check unless requirements.txt differs from `runtime\requirements.installed`
 (written by start.bat / the vbs): right after a reboot that no-op check took 7.8 s. Process AppUserModelID `Teksting.Teksting` = the ID that
@@ -99,6 +99,11 @@ king" intro with Jonas's face was built and dropped on 2026-10-09 — he chose m
   - "Already running" is a named mutex `Local\Teksting.window.<port>` (instant). The two 0.3 s port checks
     per start are gone (0.6 s); the server checks its port with a bind test (`port_free`) and
     `wait_until_ready` asks uvicorn's `started` flag. Second start → `/api/show` (retries ~10 s), no window.
+  - **Dictionary warm-up after the app page (2026-10-15)**: `warm_speller` used to start when the server
+    answered. Its ~10 s of pure Python starved the web server: the loading screen's first ping took ~3 s and the
+    app's files another ~3 s. It now waits for the first `/api/state` (`APP_LOADED`, max 30 s): app page loaded
+    9.4 s → 5.1 s after launch (measured with `TEKSTING_DEBUG_PORT`, which adds ~0.5 s). Shortening the loading
+    animation alone only gained 0.4 s — the server was the bottleneck.
   - `TEKSTING_NO_SPLASH=1` turns the stand-in off. Screen grabs (PIL ImageGrab) don't capture WebView2
     content: check the page through `TEKSTING_DEBUG_PORT` + CDP instead.
 - WebView2 with pywebview's defaults: no browser right-click menu, no browser shortcuts (Ctrl+F reaches the
@@ -113,8 +118,15 @@ king" intro with Jonas's face was built and dropped on 2026-10-09 — he chose m
    if no hallucination pattern (`HALLU` regex) and mean word prob ≥0.45. Marked `"r": 1`, flagged in the editor.
    (Added because the model skipped a clearly spoken sentence — Jonas confirmed this fix worked.)
 4. `make_cues` → learned rules applied (`autofix.json`) → saved.
-5. Double-check: `small` model transcribes again; disagreements (ignoring spacing and non-words) → flags.
-6. Waveform peaks. Status `done`.
+5. Waveform peaks. Status `done` — **the video can be proofread from here** (2026-10-15, Jonas: "do 1 and 2").
+6. Double-check (`Worker.double_check`, after `done`): `small` model transcribes again; disagreements (ignoring
+   spacing and non-words) → `disagree.json`. Meta `checking` (bool) / `check` (0–1) while it runs; status stays
+   `done`. The job list says "Dobbeltsjekker i bakgrunnen: n %"; an open editor shows it in its queue line and,
+   when `checking` turns false, `loadHints()` fetches the hints, refills the rows (text and focus untouched)
+   and toasts. Undo keeps hints that arrived later (`hv` in snapshots). It was ~40 % of a job (large ≈ 1×,
+   whole job ≈ 1.7× real time), so a video opens that much sooner; the subtitles are identical. Cancelled
+   (delete) or cut off (app closed: `start_services` clears `checking`) → the video just has no hints. Retried
+   meanwhile → the hints are dropped (they belong to the old transcript). `took`/`expected` exclude the check.
 Progress: engine reports `(p, phase, cap)` per phase (model/audio/vad/decode/rescue); `Tracker` maps phases
 to time-weighted ranges, measures real speed during decode, sends `rate`/`cap`/`pt`; the UI extrapolates every
 250 ms so the bar moves smoothly. `time_scale()` learns this PC's speed from finished jobs (`took/expected`).

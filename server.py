@@ -241,8 +241,6 @@ class Worker(threading.Thread):
         t0 = time.time()
         dur = job.get("duration") or media_duration(job["path"]) or 600.0
         plan = [("transcribing", ph, sec) for ph, sec in engine.plan(name, dur, rescue=True)]
-        if double:
-            plan += [("checking", ph, sec) for ph, sec in engine.plan("small", dur)]
         plan.append(("finishing", "finish", dur / 120 + 2))
         tr = Tracker(pid, plan, time_scale())
         store.update(pid, status="transcribing", phase=None, progress=0.0, eta=None, rate=0, pt=None, double=double,
@@ -259,24 +257,60 @@ class Worker(threading.Thread):
                     rescued.append({"s": w["s"], "e": w["e"]})
         store.save_json(pid, "rescued.json", rescued)
         cues, fixes = finish_cues(pid, words, settings)
-        disagree = []
-        if double:
-            alt = engine.transcribe("small", job["path"], job["language"], prompt,
-                                    tr.reporter("checking"), self.stop_job)
-            allow = allow_set()
-            is_word = lambda w: not speller.unknown(w, job["language"], allow)  # noqa: E731
-            disagree = compare.disagreements(words, alt, is_word)
-            # recovered stretches are flagged already; don't flag them twice
-            disagree = [d for d in disagree if not any(r["s"] - 0.3 <= d["s"] and d["e"] <= r["e"] + 0.3 for r in rescued)]
-        store.save_json(pid, "disagree.json", disagree)
+        store.save_json(pid, "disagree.json", [])
         tr.report("finishing", "finish", 0.0)
         try:
             peaks_for(pid)
         except Exception:
             traceback.print_exc()
+        # Ready to proofread now: the double-check below only adds "Alternativ" hints, and the editor picks
+        # them up when they arrive. Before, the video waited for it (~40 % of the job) before it could be opened.
         store.update(pid, status="done", progress=1.0, eta=None, message="", finished=time.time(),
-                     took=time.time() - t0, disagree=len(disagree), rescued=len(rescued),
+                     took=time.time() - t0, disagree=0, rescued=len(rescued), checking=double, check=0.0,
                      autofixed=len(fixes), edit_rate=0.0, work_seconds=0)
+        if double:
+            self.double_check(pid, job, words, rescued, prompt, dur)
+
+    def double_check(self, pid, job, words, rescued, prompt, dur):
+        """The fast model transcribes again; where it hears something else, the editor shows a hint.
+        Runs after the video is marked done (status stays "done"; meta `checking` / `check` show it)."""
+        try:
+            alt = engine.transcribe("small", job["path"], job["language"], prompt, check_reporter(pid, dur), self.stop_job)
+        except Cancelled:  # deleted or retried meanwhile: the video itself is fine, just without hints
+            safe_update(pid, checking=False)
+            return
+        allow = allow_set()
+        is_word = lambda w: not speller.unknown(w, job["language"], allow)  # noqa: E731
+        disagree = compare.disagreements(words, alt, is_word)
+        # recovered stretches are flagged already; don't flag them twice
+        disagree = [d for d in disagree if not any(r["s"] - 0.3 <= d["s"] and d["e"] <= r["e"] + 0.3 for r in rescued)]
+        try:
+            if store.get(pid).get("status") != "done":
+                safe_update(pid, checking=False)
+                return  # sent back to the queue meanwhile: these hints belong to the old transcript
+        except KeyError:
+            return
+        store.save_json(pid, "disagree.json", disagree)
+        safe_update(pid, checking=False, check=1.0, disagree=len(disagree))
+
+
+def check_reporter(pid, dur):
+    """Progress of the double-check as meta `check` (0-1), at most once a second."""
+    plan = engine.plan("small", dur)
+    total = sum(sec for _, sec in plan) or 1.0
+    ranges, acc = {}, 0.0
+    for ph, sec in plan:
+        ranges[ph] = (acc / total, sec / total)
+        acc += sec
+    last = [0.0]
+
+    def report(p, phase, cap=None):
+        if phase not in ranges or (time.time() - last[0] < 1.0 and p < 1.0):
+            return
+        last[0] = time.time()
+        lo, w = ranges[phase]
+        safe_update(pid, check=round(lo + w * p, 3))
+    return report
 
 
 class Exporter(threading.Thread):
@@ -405,6 +439,7 @@ LAST_SEEN = [time.time()]
 @app.get("/api/state")
 def get_state():
     LAST_SEEN[0] = time.time()
+    APP_LOADED.set()
     return {**state(), "app_mode": APP_MODE}
 
 
@@ -871,12 +906,19 @@ def wait_until_ready():
         time.sleep(0.05)
 
 
+APP_LOADED = threading.Event()  # set by the first /api/state: the app page is up
+
+
 def warm_speller():
-    """Loading the dictionary takes ~10 s of pure Python. It starts as soon as the server answers, while the
-    loading screen still shows, so spelling flags are ready ~10 s after start. Other threads keep running
-    meanwhile (longest pause ~0.7 s). Tried and rejected (2026-10-09): a pickled copy loads in 3.7 s but
-    freezes the whole app for ~3 s in one go; a chunked copy took 8.9 s with 2 s pauses."""
+    """Loading the dictionary takes ~10 s of pure Python. It waits until the app page has loaded: while it
+    runs, the web server answers slowly (it shares Python with it), and starting it with the server made the
+    loading screen's ping and the app's files take ~4 s longer (measured 2026-10-15: app loaded 9.4 s -> 5.1 s
+    after launch). Spelling flags are ready ~10 s after the app shows. Tried and rejected (2026-10-09): a
+    pickled copy loads in 3.7 s but freezes the whole app for ~3 s in one go; a chunked copy took 8.9 s with
+    2 s pauses."""
     wait_until_ready()
+    APP_LOADED.wait(30)  # no window at all (or it failed): warm anyway
+    time.sleep(0.5)      # let the first screen draw
     speller.warm(store.settings()["language"])
 
 
@@ -909,6 +951,8 @@ def start_services():
     for m in store.all():  # jobs that were running when the app closed start again
         if m["status"] in RUNNING:
             store.update(m["id"], status="queued", progress=0.0, eta=None)
+        if m.get("checking"):  # the double-check was cut off: the video is fine, it just has no hints
+            store.update(m["id"], checking=False)
         if (m.get("export") or {}).get("status") == "running":
             store.update(m["id"], export={"status": "queued"})
     worker.start()

@@ -38,6 +38,22 @@ def test_transcription_produces_cues_words_and_peaks(client, done_pid):
     assert peaks.status_code == 200 and len(peaks.content) > 0
 
 
+def test_video_can_be_proofread_before_the_double_check_runs(server, client, no_sleep, make_audio, monkeypatch):
+    seen = {}
+    real = server.worker.double_check
+
+    def spy(pid, *a):  # what the editor would get the moment the double-check starts
+        seen["meta"] = dict(server.store.get(pid))
+        seen["project"] = client.get(f"/api/projects/{pid}").json()
+        real(pid, *a)
+    monkeypatch.setattr(server.worker, "double_check", spy)
+    pid = transcribe(server, client, make_audio("Kort.wav", 20))
+    assert seen["meta"]["status"] == "done" and seen["meta"]["checking"] is True
+    assert seen["project"]["cues"] and seen["project"]["disagree"] == []
+    m = server.store.get(pid)
+    assert m["checking"] is False and m["disagree"] == len(client.get(f"/api/projects/{pid}").json()["disagree"]) > 0
+
+
 def test_missing_file_is_an_error_not_a_crash(server, client, make_audio):
     p = make_audio("borte.wav", 5)
     pid = client.post("/api/jobs", json={"paths": [str(p)]}).json()["added"][0]["id"]
