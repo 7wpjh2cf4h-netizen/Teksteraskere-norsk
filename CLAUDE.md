@@ -259,7 +259,7 @@ Added 2026-10-09 (all click-tested in fake mode, see git log):
   the folder. start.bat, Teksting.vbs and dev\run_fake.bat find Python by globbing `cpython-3.12*`.
   `TEKSTING_NO_SHORTCUTS=1` makes start.bat skip the shortcuts (for testing a fresh install).
   Tested: fresh install from the zip into a folder with a space → app up in ~55 s; shortcut route works.
-- Git: local repo + private GitHub remote `origin` =
+- Git: local repo + public GitHub remote `origin` (public since 2026-10-15) =
   https://github.com/7wpjh2cf4h-netizen/Teksteraskere-norsk (branch `main`). Commit after each verified
   change and push when a piece of work is done.
 
