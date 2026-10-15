@@ -5,7 +5,8 @@
 A friend of mine subtitles corporate videos for a company's website. He had a cumbersome workflow in Adobe
 Premiere Pro, which didn't have good AI transcription for Norwegian. Teksting writes the first draft with a
 speech model based on Whisper, trained by the National Library of Norway, and gives him an editor built only
-for checking it. The goal is under 3 minutes of human work per minute of video, and to beat that by a wide margin.
+for checking it. The goal is under 3 minutes of human work per minute of video, and much faster than that
+over time.
 
 Everything runs locally. No video or audio leaves the machine, and no cloud service is involved.
 

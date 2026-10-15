@@ -10,7 +10,8 @@ Claude Code on 2026-10-08. Read this fully before changing anything.
   agreeing, and use Socratic questions when explaining something new.
 - **End user**: subtitles corporate videos for a big company's website. Today they download videos
   from Vimeo, write captions in Adobe Premiere Pro, and deliver **SRT** files (confirmed 2026-10-09: no CSV needed).
-- **Goal**: under 6 min of human work per 1 min of video — and beat it by a wide margin.
+- **Goal**: under 3 min of human work per 1 min of video (was 6 until 2026-10-15), and much faster than that
+  over time.
   The app measures this ("Arbeidstid" per video, average vs goal on the Videoer page).
 - **Hardware**: laptop CPU only. Transcribe overnight, proofread by day.
 - **Promise shown in the app**: everything runs locally, nothing is uploaded. Don't add cloud services without

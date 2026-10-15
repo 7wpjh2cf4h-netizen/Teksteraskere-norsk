@@ -54,7 +54,8 @@ APPEN BLIR BEDRE JO MER DU BRUKER DEN
   Innstillinger > Lærte rettelser. Angrer du en automatisk rettelse, slutter appen å bruke den.
 - Ordlisten og de lærte rettelsene gis til modellen som stikkord, så den hører navn riktigere.
 - Arbeidstiden måles mens du er aktiv i korrekturvisningen. På Videoer-siden ser du minutter arbeid
-  per videominutt og hvor mye av teksten du måtte endre. Målet er under 6 minutter per videominutt.
+  per videominutt og hvor mye av teksten du måtte endre. Målet er under 3 minutter per videominutt,
+  og mye raskere etter hvert.
 
 EKSPORT
 - «Lagre SRT» lagrer SRT-filen ved siden av videoen, med samme navn. En eldre fil blir tatt vare på som

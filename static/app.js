@@ -432,12 +432,12 @@ function updateJobs() {
   }
   q.replaceChildren(...parts.filter(Boolean));
   q.hidden = !parts.length;
-  // average work time per video minute (goal: under 6)
+  // average work time per video minute (goal: under 3, and much faster over time)
   const measured = jobs.filter((j) => j.status === "done" && j.work_seconds >= 60 && j.duration);
   const sl = $("#statsline");
   if (measured.length) {
     const ratio = measured.reduce((a, j) => a + j.work_seconds, 0) / measured.reduce((a, j) => a + j.duration, 0);
-    sl.replaceChildren(h("strong", { class: ratio < 6 ? "ok" : "bad" }, t("avg_ratio", { r: num(ratio, 1) })), " ",
+    sl.replaceChildren(h("strong", { class: ratio < 3 ? "ok" : "bad" }, t("avg_ratio", { r: num(ratio, 1) })), " ",
       h("span", { class: "muted" }, t("avg_detail", { n: measured.length })));
     sl.hidden = false;
   } else sl.hidden = true;
