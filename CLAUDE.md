@@ -2,24 +2,25 @@
 
 Local Windows app that turns Norwegian corporate videos (10–60 min) into publication-quality SRT subtitles,
 plus an editor to proofread them against the video. Built in a claude.ai session (Oct 2026), moved to
-Claude Code on Jonas's PC on 2026-10-08. Read this fully before changing anything.
+Claude Code on 2026-10-08. Read this fully before changing anything.
 
 ## The people and the goal
-- **Jonas** (owner; product decisions, requirements and testing; builds this with Claude Code). Explain technical
-  steps and commands plainly, prefer doing over telling, keep answers concise, challenge his ideas rather than agreeing, and use Socratic questions when he is learning.
-- **End user**: a friend who subtitles corporate videos for a big company's website. Today he downloads videos
-  from Vimeo, writes captions in Adobe Premiere Pro, and delivers **SRT** files (confirmed by Jonas 2026-10-09: no CSV needed).
-- **Goal**: under 6 min of human work per 1 min of video (Jonas: "we should beat that by a lot").
+- **Owner**: product decisions, requirements and testing; builds this with Claude Code. Explain technical
+  steps and commands plainly, prefer doing over telling, keep answers concise, challenge ideas rather than
+  agreeing, and use Socratic questions when explaining something new.
+- **End user**: subtitles corporate videos for a big company's website. Today they download videos
+  from Vimeo, write captions in Adobe Premiere Pro, and deliver **SRT** files (confirmed 2026-10-09: no CSV needed).
+- **Goal**: under 6 min of human work per 1 min of video — and beat it by a wide margin.
   The app measures this ("Arbeidstid" per video, average vs goal on the Videoer page).
 - **Hardware**: laptop CPU only. Transcribe overnight, proofread by day.
 - **Promise shown in the app**: everything runs locally, nothing is uploaded. Don't add cloud services without
-  asking Jonas (a cloud AI proofreader was discussed and rejected for this reason).
+  asking the owner (a cloud AI proofreader was discussed and rejected for this reason).
 
-## Priorities (Jonas, 2026-10-09) — use these to decide every trade-off
+## Priorities (2026-10-09) — use these to decide every trade-off
 1. **Transcription accuracy beats speed, always.** Never trade accuracy for speed (no smaller beam, no
    batched decoding, no partial double-check). Speed-ups are welcome only when output stays identical.
 2. **Proofreading editor: usability, UI functionality and speed** — this is where the human minutes go.
-- Burn-in is low priority: the friend won't use it (keep it working, don't invest in it).
+- Burn-in is low priority: the end user won't use it (keep it working, don't invest in it).
 
 ## Subtitle rules (Netflix-style, Norwegian)
 42 chars/line, max 2 lines, 1–7 s per cue, max 17 chars/s, ≥0.08 s gap between cues, cue lingers 0.3 s after
@@ -34,13 +35,13 @@ All tunables: `tekst/segment.py` class `P`; user-editable subset in Settings →
 - **Dev, real models**: `runtime\python\cpython-3.12.15-windows-x86_64-none\python.exe server.py` → http://127.0.0.1:8765
 - **Dev, fake mode (no models, instant)**: `dev\run_fake.bat` → http://127.0.0.1:8766 — fake transcripts,
   fake downloads, separate data folder `dev\fakedata`. Add any short .mp4 as a video. Use this for all UI work.
-  Port 8766 so it can run alongside Jonas's real app on 8765.
+  Port 8766 so it can run alongside the real app on 8765.
 - Env vars: `TEKSTING_FAKE=1`, `TEKSTING_DATA` (data folder, default `data\`), `TEKSTING_PORT` (8765),
   `TEKSTING_NO_BROWSER=1`, `TEKSTING_APP=1` or `--app` (Edge/Chrome app window + auto-exit),
   `TEKSTING_IDLE_EXIT` (seconds, default 90, browser fallback only), `TEKSTING_DEBUG_PORT` (dev: Chrome DevTools
   port for the app window, e.g. 9333 → http://127.0.0.1:9333/json; drive it with a CDP script).
 - Log when started from the shortcut: `data\teksting.log`.
-- Build the zip for the friend: `powershell -ExecutionPolicy Bypass -File dev\pack.ps1` → `dist\Teksting.zip`
+- Build the zip for the end user: `powershell -ExecutionPolicy Bypass -File dev\pack.ps1` → `dist\Teksting.zip`
   (code only, CRLF for .bat/.vbs/.ps1/.txt; never include `data\`, `runtime\`).
   Gmail blocks this zip (it contains .bat/.vbs) — share via OneDrive link.
 - `dev\run_fake.bat` and `dev\pack.ps1` were recreated in Claude Code on 2026-10-08 (the originals never left
@@ -73,9 +74,9 @@ WebView2 is built into Windows) owns the main thread and opens at once with `sta
 imports `server` and runs uvicorn beside it (`serve_in_background`). The loading page (a small typewriter
 typing "Teksting" with a yellow subtitle bar, app tokens, light/dark) pings `/api/ping` (fetch no-cors) and
 switches to the app itself; once ready it finishes the word fast (no waiting on the animation).
-Fixed timeline (Jonas's choice, constants at the top of the script): "Raskere teksting" (was "Jonas er best" until 2026-10-09) fully typed at
-(DONE_MS; 1.25 s since 2026-10-15), fade 1.3–1.55 s (SHOW_MS, FADE_MS; was 2.7–3.0 s until 2026-10-15) after the real window shows, later only if the server isn't ready. A "Hail the
-king" intro with Jonas's face was built and dropped on 2026-10-09 — he chose minimal and classy instead.
+Fixed timeline (constants at the top of the script): "Raskere teksting" fully typed at
+(DONE_MS; 1.25 s since 2026-10-15), fade 1.3–1.55 s (SHOW_MS, FADE_MS; was 2.7–3.0 s until 2026-10-15) after the real window shows, later only if the server isn't ready.
+A more elaborate intro was built and dropped on 2026-10-09 in favour of a minimal one.
 `Teksting.vbs` skips the uv package check unless requirements.txt differs from `runtime\requirements.installed`
 (written by start.bat / the vbs): right after a reboot that no-op check took 7.8 s. Process AppUserModelID `Teksting.Teksting` = the ID that
 `lag-snarveier.ps1` writes on the shortcuts → one taskbar button with the Teksting icon, and pinning works.
@@ -87,13 +88,13 @@ king" intro with Jonas's face was built and dropped on 2026-10-09 — he chose m
 - Startup timings go to the log ("stand-in window after", "window shown after", "server ready after").
   Two traps found: the nb dictionary takes ~10 s of pure Python to load (now `warm_speller`, after the
   window is up), and on Windows a connect to a closed port takes ~2 s (`port_in_use`, 0.3 s timeout).
-- **Instant stand-in window (2026-10-15, Jonas: "time from pressing the icon until the window pops up is too
-  long")**: `tekst/splash.py` is the first thing app mode runs (server.py imports only os/sys/time before it).
+- **Instant stand-in window (2026-10-15: the time from clicking the icon until a window
+  appears was too long)**: `tekst/splash.py` is the first thing app mode runs (server.py imports only os/sys/time before it).
   A plain Win32 window (ctypes, same colour/icon/title/dark title bar) shows 0.25 s after Python starts; the
   real window replaces it in the same spot ~2 s later (`on_shown` closes it). Measured click→first window
   3.05 s → 0.25 s; real window 3.05 → ~2.2 s; server answers 3.8 → ~2.6 s.
   - Same spot: `splash.layout()` gives one rectangle for both (logical for pywebview `x/y/width/height`,
-    physical = int(v × scale) like WinForms). 1440×900 but capped to the work area — before, on Jonas's
+    physical = int(v × scale) like WinForms). 1440×900 but capped to the work area — before, on the dev
     1920×1080 @125 % laptop, the window was 1800×1125 (taller than the 1020 px above the taskbar) and at
     Windows' cascading default spot. The log line "stand-in (…) -> window (…)" says "MOVED" if they differ.
   - "Already running" is a named mutex `Local\Teksting.window.<port>` (instant). The two 0.3 s port checks
@@ -116,9 +117,9 @@ king" intro with Jonas's face was built and dropped on 2026-10-09 — he chose m
    glossary + learned words passed as `hotwords`).
 3. **Gap rescue**: text-less gaps ≥1.5 s that contain loud 1 s windows get re-transcribed without VAD; kept only
    if no hallucination pattern (`HALLU` regex) and mean word prob ≥0.45. Marked `"r": 1`, flagged in the editor.
-   (Added because the model skipped a clearly spoken sentence — Jonas confirmed this fix worked.)
+   (Added because the model skipped a clearly spoken sentence — confirmed fixed on real audio.)
 4. `make_cues` → learned rules applied (`autofix.json`) → saved.
-5. Waveform peaks. Status `done` — **the video can be proofread from here** (2026-10-15, Jonas: "do 1 and 2").
+5. Waveform peaks. Status `done` — **the video can be proofread from here** (2026-10-15).
 6. Double-check (`Worker.double_check`, after `done`): `small` model transcribes again; disagreements (ignoring
    spacing and non-words) → `disagree.json`. Meta `checking` (bool) / `check` (0–1) while it runs; status stays
    `done`. The job list says "Dobbeltsjekker i bakgrunnen: n %"; an open editor shows it in its queue line and,
@@ -141,7 +142,7 @@ to time-weighted ranges, measures real speed during decode, sends `rate`/`cap`/`
   (WebView2) ~0.7 GB. Idle with both models loaded the app was ~3.2 GB.
 - Freeing idle models (`Worker.free_idle_models`): both models are freed `TEKSTING_IDLE_FREE` (60 s) after
   the last job once the queue is empty. Only transcription uses a model: the editor has no model features
-  (Jonas 2026-10-09: "human ear always beats model" when proofreading), so proofreading runs at ~1.3 GB.
+  (decided 2026-10-09: when proofreading, a human ear beats the model), so proofreading runs at ~1.3 GB.
 - Polling: 1 s while anything runs/queues/exports/downloads, 3 s idle, 10 s while the window is hidden
   (must stay < 90 s: the browser-mode watchdog quits after 90 s without a poll). `/api/downloads` only on the
   settings page or during a download. Editor `loop()` sleeps after ~30 still frames while paused; video
@@ -156,7 +157,7 @@ to time-weighted ranges, measures real speed during decode, sends `rate`/`cap`/`
 header (link back to the list), and a toast "«name» er klar til korrektur" + "Åpne" when a queued video
 finishes. Uses `live()`/`RUNNING` from app.js (classic scripts share globals).
 
-### Editor layout (2026-10-09, Jonas asked for all of these)
+### Editor layout (2026-10-09)
 - SRT only by default: setting `burn_tools` (off) hides Stil, Flytt opp, burned-in export and the batch
   "Lag videoer med tekst"; the header then has one "Lagre SRT" button (save next to the video) and
   "Last ned SRT" sits in ⋯. With the setting on, everything is back as before.
@@ -186,9 +187,9 @@ failures and returns `failed`. Verified: strict format check, the `srt` and `pys
 all read a 683-cue export identically; timestamps carry correctly (59.9996 s → 00:01:00,000; > 1 h); empty cues skipped
 with continuous numbering; Norwegian letters/typography, `<`, `&`, `-->` and stray blank lines are safe.
 Open: "Flytt opp" (`pos: top`) is NOT in the SRT (no position in the format). `{n8}` would carry it in VLC/YouTube/
-ffmpeg, but some players show it as literal text — ask Jonas which player/site the SRTs go to before adding it.
+ffmpeg, but some players show it as literal text — ask the owner which player/site the SRTs go to before adding it.
 Test hygiene: fake-mode export-all writes next to EVERY finished test video — only ever add copies under the scratch
-folder as test videos (on 2026-10-09 test .srt files landed next to Jonas's real files and had to be removed).
+folder as test videos (on 2026-10-09 test .srt files landed next to real files and had to be removed).
 
 ### Static files must never come from a stale cache (fixed 2026-10-09)
 The app window keeps its HTTP cache between runs (pywebview `private_mode=False`); it reused old app.js /
@@ -218,7 +219,7 @@ Review mode ("Gå gjennom": jumps only to flagged cues, Enter approves), find/re
 (font, size, colour, box, position — preview overlay matches the burned result), export menu (SRT next to the
 video, download SRT, burn-in video), undo/redo (also for split/merge/delete; toast with "Angre"), flags
 (spelling, reading speed, line length, model disagreement with "Bruk", rescued speech, autofix with "Angre"),
-"Hør på nytt" replays the cue (`playCue`, mousedown cancelled so the caret stays in the text). Ctrl+click a word in the text → `hearAt` plays that word ±0.5 s (matched to the model words in the cue by spelling, then by position; estimated from text position if the cue has no model words). Replaying the same cue within 12 s shows a toast nudge (once per cue) offering "Spill sakte (0,75×)"; Jonas wants it as a nudge, never automatic. The rate is restored on pause (`restoreRate`). Removed 2026-10-09 on Jonas's request: the model suggestion for one cue ("listen"/"Foreslå tekst", Alt+H, also used by "Ny undertekst her") — the human ear beats the model in the editor, and it let the editor run without the 1.5 GB model, glossary popup when a word is corrected to a similar spelling,
+"Hør på nytt" replays the cue (`playCue`, mousedown cancelled so the caret stays in the text). Ctrl+click a word in the text → `hearAt` plays that word ±0.5 s (matched to the model words in the cue by spelling, then by position; estimated from text position if the cue has no model words). Replaying the same cue within 12 s shows a toast nudge (once per cue) offering "Spill sakte (0,75×)"; by design a nudge, never automatic. The rate is restored on pause (`restoreRate`). Removed 2026-10-09: the model suggestion for one cue ("listen"/"Foreslå tekst", Alt+H, also used by "Ny undertekst her") — the human ear beats the model in the editor, and it let the editor run without the 1.5 GB model, glossary popup when a word is corrected to a similar spelling,
 work timer (counts only active time), pause-on-type, waveform timeline (drag to scroll, wheel scrolls,
 Ctrl+wheel zooms, drag cue edges to retime).
 Keys outside text fields: Space play/pause, ←/→ ±5 s, ↑/↓ previous/next cue, Enter edit, Esc leave field, ? card.
@@ -226,7 +227,7 @@ Everywhere (Alt, never with Ctrl — Ctrl+Alt is AltGr on Norwegian keyboards): 
 replay, Alt+I/O start/end here (snaps to a word within 0.25 s), Alt+K approve, Alt+S split, Alt+M merge, Alt+W wrap,
 Alt+Backspace delete, Alt+H suggest text (model), Alt+N new cue, Alt+−/Alt++ speed. Ctrl+F find, Ctrl+Z/Y undo/redo.
 The list lives in i18n `keys_groups` (nb + en) and is shown as a small card under the timeline (keyboard button or
-?), open the first time; tooltips name the key too. Hover tooltips only on non-obvious buttons (Jonas's wish).
+?), open the first time; tooltips name the key too. Hover tooltips only on non-obvious buttons (by design).
 
 Added 2026-10-09 (all click-tested in fake mode, see git log):
 - **Uncertain words**: model words with confidence < `UNSURE_P` (0.5) still present in the cue text → chip
@@ -245,14 +246,14 @@ Added 2026-10-09 (all click-tested in fake mode, see git log):
 
 ## Decisions already made (don't relitigate without reason)
 - NB-Whisper large is the default model (best Norwegian accuracy); medium/small optional.
-- No audio preprocessing (denoise etc.) — Jonas declined it.
+- No audio preprocessing (denoise etc.) — declined.
 - `av<17` pinned (PyAV 17+ broke faster-whisper's `metadata_errors` arg).
 - Windows only; zip + start.bat distribution; models download automatically.
 - Python is fetched by uv into the app folder (`UV_PYTHON_PREFERENCE=only-managed`), never the system Python.
 - UI is Norwegian-first, English toggle.
 - **No virtual environment** (since 2026-10-08): packages go straight into uv's Python in
   `runtime\python\cpython-3.12*` (`uv pip install --python <it> --break-system-packages`). Reason: on the
-  friend's company PC the venv launcher `.venv\Scripts\python.exe` was blocked ("Ingen tilgang", os error 5)
+  end user's company PC the venv launcher `.venv\Scripts\python.exe` was blocked ("Ingen tilgang", os error 5)
   while uv's own python.exe ran fine. `uv python install --no-bin --no-registry` so nothing is written outside
   the folder. start.bat, Teksting.vbs and dev\run_fake.bat find Python by globbing `cpython-3.12*`.
   `TEKSTING_NO_SHORTCUTS=1` makes start.bat skip the shortcuts (for testing a fresh install).
@@ -263,11 +264,11 @@ Added 2026-10-09 (all click-tested in fake mode, see git log):
 
 ## Status: tested vs NOT tested
 Tested (Linux, fake mode + Playwright headless): every UI flow, burn-in with real ffmpeg, learning, progress bar,
-timeline drag, app-mode watchdog. Tested with real models (by Jonas on Windows, earlier versions): transcription
+timeline drag, app-mode watchdog. Tested with real models (on Windows, earlier versions): transcription
 quality, gap rescue, start.bat install.
 **Verified on Windows 2026-10-08** (fake mode, via CDP on the real window): own window opens, video plays,
 editor works, close-while-busy hides + auto-quit, second start re-shows, idle close quits, spell check.
-**Not yet verified on Windows**: pinning from the real shortcut (by Jonas), DPI of the file picker, SRT download
+**Not yet verified on Windows**: pinning from the real shortcut, DPI of the file picker, SRT download
 Save dialog, new progress Tracker with real models (ETA accuracy), timeline drag.
 Open (2026-10-08):
 - Double-check flags varied between two app jobs on the *same* audio (4 vs 8 flags) although main-model words
@@ -278,16 +279,16 @@ Open (2026-10-08):
 
 ## Open work (priority order)
 1. **Verify the untested Windows items above**; read `data\teksting.log` for errors.
-2. **Measure transcription accuracy** — Jonas is asking the friend for 2–3 old videos + his final SRTs. Use them
+2. **Measure transcription accuracy** — waiting for 2–3 old videos + the end user's final SRTs. Use them
    as ground truth: word error rate of today's pipeline, then test accuracy-only changes (beam size up, VAD
-   settings, hotwords/glossary) and keep only what measurably helps. Also check his SRT style (line breaks,
+   settings, hotwords/glossary) and keep only what measurably helps. Also check that SRT style (line breaks,
    timing) against ours.
-3. **Vimeo** — unknown whether the colleague uploads captions to Vimeo and whether we can get account access.
+3. **Vimeo** — unknown whether the end user uploads captions to Vimeo and whether we can get account access.
    Options: paste a Vimeo link to import the video; upload the finished track via Vimeo API. Ask first.
 4. Collect real work-time numbers from 3–5 videos (Videoer page) and find where time goes.
 
 ## Conventions
-- Keep it simple and functional; Jonas likes the current clean look (light page, dark editor "studio",
+- Keep it simple and functional; the owner likes the current clean look (light page, dark editor "studio",
   brand blue `#1f4f78`, subtitle yellow `#ffd84d`).
 - New UI text → `i18n.js` in nb + en. Check Norwegian plurals ("1 sted" vs "2 steder").
 - Long-running work goes through `Worker`/`Exporter`, never in a request handler.
