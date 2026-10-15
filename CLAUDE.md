@@ -246,7 +246,7 @@ Added 2026-10-09 (all click-tested in fake mode, see git log):
   `TEKSTING_NO_SHORTCUTS=1` makes start.bat skip the shortcuts (for testing a fresh install).
   Tested: fresh install from the zip into a folder with a space → app up in ~55 s; shortcut route works.
 - Git: local repo + private GitHub remote `origin` =
-  https://github.com/7wpjh2cf4h-netizen/Tekste-prosjekt-sebastian (branch `main`). Commit after each verified
+  https://github.com/7wpjh2cf4h-netizen/Teksteraskere-norsk (branch `main`). Commit after each verified
   change and push when a piece of work is done.
 
 ## Status: tested vs NOT tested
