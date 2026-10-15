@@ -254,7 +254,7 @@ Added 2026-10-09 (all click-tested in fake mode, see git log):
   `runtime\python\cpython-3.12*` (`uv pip install --python <it> --break-system-packages`). Reason: on the
   friend's company PC the venv launcher `.venv\Scripts\python.exe` was blocked ("Ingen tilgang", os error 5)
   while uv's own python.exe ran fine. `uv python install --no-bin --no-registry` so nothing is written outside
-  the folder. start.bat, Teksting.vbs and devun_fake.bat find Python by globbing `cpython-3.12*`.
+  the folder. start.bat, Teksting.vbs and dev\run_fake.bat find Python by globbing `cpython-3.12*`.
   `TEKSTING_NO_SHORTCUTS=1` makes start.bat skip the shortcuts (for testing a fresh install).
   Tested: fresh install from the zip into a folder with a space → app up in ~55 s; shortcut route works.
 - Git: local repo + private GitHub remote `origin` =
@@ -275,7 +275,6 @@ Open (2026-10-08):
   through `Engine.transcribe` (also temperature fallback never triggered). Suspect something in the server job
   (hotwords/prompt? thread timing?). Flags are only review hints; subtitles come from the main model.
 - i18n `offline` text still says "black window / start.bat", which no longer fits app mode.
-- `Downloads\Kongens tale_tekstet.part.mp4` (old junk from before the fix) — Jonas to delete.
 
 ## Open work (priority order)
 1. **Verify the untested Windows items above**; read `data\teksting.log` for errors.
