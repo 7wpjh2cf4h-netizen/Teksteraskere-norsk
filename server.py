@@ -1,32 +1,35 @@
 """Teksting - local subtitle app. Run via start.bat (Windows) or: python server.py"""
 import os
+import sys
+import time
+
+T0 = time.time()  # for the startup timings in the log
 
 os.environ.setdefault("HF_HUB_DISABLE_XET", "1")              # plain downloads -> measurable progress
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+
+if (__name__ == "__main__" and os.name == "nt" and os.environ.get("TEKSTING_NO_BROWSER") != "1"
+        and ("--app" in sys.argv or os.environ.get("TEKSTING_APP") == "1")):
+    # App mode: hand over before importing anything else, so a window shows within ~0.3 s (tekst/launch.py);
+    # everything below then loads beside it
+    from tekst import splash
+    early = splash.early()  # stand-in window first (ctypes only), then the rest
+    from tekst import launch
+    launch.main(T0, early)
+    raise SystemExit
 
 import json
 import mimetypes
 import re
 import socket
 import subprocess
-import sys
 import threading
-import time
-
-T0 = time.time()  # for the startup timings in the log
 import traceback
 import urllib.parse
 import urllib.request
 import webbrowser
 from pathlib import Path
-
-if (__name__ == "__main__" and os.name == "nt" and os.environ.get("TEKSTING_NO_BROWSER") != "1"
-        and ("--app" in sys.argv or os.environ.get("TEKSTING_APP") == "1")):
-    # App mode: open the window with its loading screen first; everything below loads beside it
-    from tekst import launch
-    launch.main(T0)
-    raise SystemExit
 
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
@@ -859,10 +862,13 @@ def open_ui(url):
 
 def wait_until_ready():
     """Wait for the server to answer, so the window never shows a 'site not available' page."""
-    for _ in range(150):  # up to 30 s on a slow PC
-        if already_running():
+    for _ in range(600):  # up to 30 s on a slow PC
+        if UVICORN:  # app mode: our own server says when it listens (no 0.3 s port checks while it starts)
+            if UVICORN[0].started:
+                return
+        elif already_running():
             return
-        time.sleep(0.2)
+        time.sleep(0.05)
 
 
 def warm_speller():
@@ -910,13 +916,29 @@ def start_services():
     threading.Thread(target=warm_speller, daemon=True).start()
 
 
+def port_free():
+    """Instant when the port is free (the usual case at startup): binding a test socket works. Only when that
+    fails do we ask with port_in_use(), which costs ~0.3 s when nobody answers (a port in TIME_WAIT)."""
+    with socket.socket() as s:
+        try:
+            s.bind(("127.0.0.1", PORT))
+            return True
+        except OSError:
+            pass
+    return not port_in_use()
+
+
+UVICORN = []  # the app-mode web server, so wait_until_ready() can ask it directly instead of polling the port
+
+
 def serve_in_background():
     """App mode (tekst/launch.py): the window owns the main thread, so the server runs beside it."""
-    if port_in_use():
+    if not port_free():
         raise RuntimeError(f"Port {PORT} is used by another program. Set TEKSTING_PORT to another number.")
     start_services()
     import uvicorn
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=PORT, log_level="warning"))
+    UVICORN.append(server)
     threading.Thread(target=server.run, daemon=True).start()
     threading.Thread(target=watchdog, daemon=True).start()
     print("\n  Teksting is running:", f"http://127.0.0.1:{PORT}/")

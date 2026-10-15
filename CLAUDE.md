@@ -74,7 +74,7 @@ imports `server` and runs uvicorn beside it (`serve_in_background`). The loading
 typing "Teksting" with a yellow subtitle bar, app tokens, light/dark) pings `/api/ping` (fetch no-cors) and
 switches to the app itself; once ready it finishes the word fast (no waiting on the animation).
 Fixed timeline (Jonas's choice, constants at the top of the script): "Raskere teksting" (was "Jonas er best" until 2026-10-09) fully typed at 2.1 s
-(DONE_MS), fade 2.7–3.0 s (SHOW_MS, FADE_MS), later only if the server isn't ready; app on screen ~5.6 s from start. A "Hail the
+(DONE_MS), fade 2.7–3.0 s (SHOW_MS, FADE_MS) after the real window shows, later only if the server isn't ready. A "Hail the
 king" intro with Jonas's face was built and dropped on 2026-10-09 — he chose minimal and classy instead.
 `Teksting.vbs` skips the uv package check unless requirements.txt differs from `runtime\requirements.installed`
 (written by start.bat / the vbs): right after a reboot that no-op check took 7.8 s. Process AppUserModelID `Teksting.Teksting` = the ID that
@@ -84,9 +84,23 @@ king" intro with Jonas's face was built and dropped on 2026-10-09 — he chose m
   when the last job is done. Starting again (shortcut) while running → `POST /api/show` brings the window back.
 - `Teksting.vbs` must start pythonw with window style 1, not 0: Windows applies the "hidden" start to the
   first window. `launch.py` also re-shows on the `shown` event, as a safety net.
-- Startup timings go to the log ("server ready after", "window shown after"); ~4 s on Jonas's PC.
+- Startup timings go to the log ("stand-in window after", "window shown after", "server ready after").
   Two traps found: the nb dictionary takes ~10 s of pure Python to load (now `warm_speller`, after the
-  window is up), and on Windows a connect to a closed port takes ~2 s (now `port_in_use`, 0.3 s timeout).
+  window is up), and on Windows a connect to a closed port takes ~2 s (`port_in_use`, 0.3 s timeout).
+- **Instant stand-in window (2026-10-15, Jonas: "time from pressing the icon until the window pops up is too
+  long")**: `tekst/splash.py` is the first thing app mode runs (server.py imports only os/sys/time before it).
+  A plain Win32 window (ctypes, same colour/icon/title/dark title bar) shows 0.25 s after Python starts; the
+  real window replaces it in the same spot ~2 s later (`on_shown` closes it). Measured click→first window
+  3.05 s → 0.25 s; real window 3.05 → ~2.2 s; server answers 3.8 → ~2.6 s.
+  - Same spot: `splash.layout()` gives one rectangle for both (logical for pywebview `x/y/width/height`,
+    physical = int(v × scale) like WinForms). 1440×900 but capped to the work area — before, on Jonas's
+    1920×1080 @125 % laptop, the window was 1800×1125 (taller than the 1020 px above the taskbar) and at
+    Windows' cascading default spot. The log line "stand-in (…) -> window (…)" says "MOVED" if they differ.
+  - "Already running" is a named mutex `Local\Teksting.window.<port>` (instant). The two 0.3 s port checks
+    per start are gone (0.6 s); the server checks its port with a bind test (`port_free`) and
+    `wait_until_ready` asks uvicorn's `started` flag. Second start → `/api/show` (retries ~10 s), no window.
+  - `TEKSTING_NO_SPLASH=1` turns the stand-in off. Screen grabs (PIL ImageGrab) don't capture WebView2
+    content: check the page through `TEKSTING_DEBUG_PORT` + CDP instead.
 - WebView2 with pywebview's defaults: no browser right-click menu, no browser shortcuts (Ctrl+F reaches the
   app). Downloads ("Last ned SRT") show a Save dialog (`ALLOW_DOWNLOADS`).
 

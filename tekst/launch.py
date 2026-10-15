@@ -12,7 +12,6 @@ import sys
 import threading
 import time
 import traceback
-import urllib.request
 from pathlib import Path
 
 APP_ID = "Teksting.Teksting"  # same ID on the shortcuts (lag-snarveier.ps1) -> one taskbar button, pinnable
@@ -33,6 +32,7 @@ def _show_existing():
     if not _port_in_use():
         return False
     try:
+        import urllib.request  # only needed when another Teksting is running
         req = urllib.request.Request(URL + "api/show", data=b"", method="POST")
         with urllib.request.urlopen(req, timeout=3) as r:
             return bool(json.load(r).get("ok"))
@@ -47,30 +47,32 @@ def _ui_lang():
         return ""
 
 
-def _dark_mode():
-    """Windows app theme, so the empty window starts in the right colour (no white flash in dark mode)."""
-    try:
-        import winreg
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
-                            r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize") as k:
-            return winreg.QueryValueEx(k, "AppsUseLightTheme")[0] == 0
-    except OSError:
-        return False
-
-
 def loading_html():
     html = (APP_DIR / "static" / "loading.html").read_text(encoding="utf-8")
     return html.replace("__URL__", URL).replace("__LANG__", _ui_lang())
 
 
-def main(t0):
+def main(t0, early=None):
+    """early = (first, splash, dark) from tekst.splash.early(), which server.py runs before any other import."""
     if sys.stdout is None or "pythonw" in Path(sys.executable).name.lower():
         DATA.mkdir(parents=True, exist_ok=True)
         sys.stdout = sys.stderr = open(DATA / "teksting.log", "a", encoding="utf-8", buffering=1)
     print("\n---", time.strftime("%Y-%m-%d %H:%M:%S"), "starting")
-    if _show_existing():
+    from tekst import splash as splash_mod
+    first, splash, dark = early or splash_mod.early()
+    if not first:
+        # Teksting is already running (it holds the mutex): bring its window forward. If it is still starting,
+        # its server may not answer yet, so keep trying for a few seconds. Never start a second copy.
+        for _ in range(20):
+            if _show_existing():
+                break
+            time.sleep(0.5)
         os._exit(0)
-    viewer = _port_in_use()  # a Teksting without its own window (browser fallback) is running: just show it
+    if splash and splash.hwnd:
+        print(f"  stand-in window after {time.time() - t0:.1f} s")
+    # No port checks here: each costs ~0.3 s when nothing answers (it did twice per start before). If something
+    # else holds the port, the loading screen simply shows whatever answers there.
+    viewer = False
 
     srv = {}
     failed = threading.Event()
@@ -91,19 +93,21 @@ def main(t0):
         threading.Thread(target=boot, daemon=True).start()
 
     try:
-        import ctypes
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_ID)
         import webview
     except Exception as e:  # no pywebview/.NET: use a browser window like before
         print("Own window not available, using a browser:", e)
+        if splash:
+            splash.close()
         _browser_fallback(srv, failed, viewer)
         return
 
     webview.settings["ALLOW_DOWNLOADS"] = True  # "Last ned SRT" opens a save dialog
     if os.environ.get("TEKSTING_DEBUG_PORT"):  # dev: inspect the window with Chrome DevTools
         webview.settings["REMOTE_DEBUGGING_PORT"] = int(os.environ["TEKSTING_DEBUG_PORT"])
-    w = webview.create_window("Teksting", html=loading_html(), width=1440, height=900, min_size=(400, 500),
-                              background_color="#10171d" if _dark_mode() else "#edf1f4")  # --paper
+    # exactly where the stand-in window is (1440 x 900, or less on a small screen, centred)
+    lx, ly, lw, lh = (splash and splash.logical) or splash_mod.layout()[0]
+    w = webview.create_window("Teksting", html=loading_html(), x=lx, y=ly, width=lw, height=lh, min_size=(400, 500),
+                              background_color="#10171d" if dark else "#edf1f4")  # --paper
 
     def on_closing():
         # Closing while a video is transcribing hides the window; the job finishes, then the app quits.
@@ -116,6 +120,9 @@ def main(t0):
     def on_shown():
         w.show()  # Teksting.vbs starts pythonw hidden; Windows applies that to our first window
         print(f"  window shown after {time.time() - t0:.1f} s")
+        if splash:
+            _log_handover(w, splash)
+            splash.close()  # the real window is on top in the same spot: the stand-in can go
 
     def attach():  # runs once the window exists: let the server reach it (/api/show, watchdog)
         while "m" not in srv and not failed.is_set() and not viewer:
@@ -131,9 +138,24 @@ def main(t0):
     except Exception as e:
         print("Own window failed, using a browser:", e)
         traceback.print_exc()
+        if splash:
+            splash.close()
         _browser_fallback(srv, failed, viewer)
         return
     os._exit(0)  # window closed and nothing running (closing while busy only hides it)
+
+
+def _log_handover(w, splash):
+    """Note in the log if the real window did not land exactly where the stand-in was (a visible jump)."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+        r = wintypes.RECT()
+        ctypes.windll.user32.GetWindowRect(int(str(w.native.Handle)), ctypes.byref(r))
+        real = (r.left, r.top, r.right - r.left, r.bottom - r.top)
+        print(f"  stand-in {tuple(splash.rect or ())} -> window {real}" + ("" if real == tuple(splash.rect or ()) else "  (MOVED)"))
+    except Exception as e:
+        print("  handover check failed:", e)
 
 
 def _browser_fallback(srv, failed, viewer):
